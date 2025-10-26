@@ -13,5 +13,7 @@ google-cloud-bigquery>=3.11.0
 google-cloud-storage>=2.10.0
 
 # Optional Dependencies (for advanced features)
+playwright-stealth>=0.1.0  # Optional: for bot detection evasion (recommended)
+fake-useragent>=1.0.0  # Optional: for randomized Chrome user agents (recommended)
 mitmproxy>=10.0.0  # Optional: for accurate traffic measurement (use --proxy flag)
 

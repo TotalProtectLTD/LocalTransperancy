@@ -1,0 +1,18 @@
+================================================================================
+API RESPONSE DEBUG
+================================================================================
+Timestamp: 2025-10-26 17:44:47.587499
+API Type: SearchCreatives
+Response Index: 3
+Captured At: 1761486284.795721
+API URL: https://adstransparency.google.com/anji/_/rpc/SearchService/SearchCreatives?authuser=
+Response Size: 2092 bytes
+
+================================================================================
+API RESPONSE TEXT (Full):
+================================================================================
+{"1":[{"1":"AR14193700331442929665","2":"CR12260903286613213185","3":{"1":{"4":"https://displayads-formats.googleusercontent.com/ads/preview/content.js?client\u003dads-integrity-transparency\u0026obfuscatedCustomerId\u003d1094301298\u0026creativeId\u003d734657493535\u0026uiFeatures\u003d12,54\u0026adGroupId\u003d171445628605\u0026assets\u003d%3DH4sIAAAAAAAAAOMS5eLkONfQ9f8nqwAPFwfHz1t3Wj0FOAA3_msCFwAAAA\u0026sig\u003dACiVB_yuWa6OFZq9r-UBREUzgDasOoU2TA\u0026htmlParentId\u003dfletch-render-13340757273751386950\u0026responseCallback\u003dfletchCallback13340757273751386950"}},"4":3,"6":{"1":"1740545219","2":802467000},"7":{"1":"1743229580","2":348322000},"12":"COE Services Ltd","13":20},{"1":"AR14193700331442929665","2":"CR07743361576924610561","3":{"1":{"4":"https://displayads-formats.googleusercontent.com/ads/preview/content.js?client\u003dads-integrity-transparency\u0026obfuscatedCustomerId\u003d1094301298\u0026creativeId\u003d734735174558\u0026uiFeatures\u003d12,54\u0026adGroupId\u003d171445628605\u0026assets\u003d%3DH4sIAAAAAAAAAOMS4-Lk2Nxzc9ovVgEeIPPSnXXLd7IKcAAAkokgZhgAAAA\u0026sig\u003dACiVB_xXmSVS3nbjJOPBNJySj3T2yoTu6w\u0026htmlParentId\u003dfletch-render-16257305255263565984\u0026responseCallback\u003dfletchCallback16257305255263565984"}},"4":3,"6":{"1":"1740522815","2":430846000},"7":{"1":"1743228904","2":933982000},"12":"COE Services Ltd","13":23},{"1":"AR14193700331442929665","2":"CR15840794674273976321","3":{"1":{"4":"https://displayads-formats.googleusercontent.com/ads/preview/content.js?client\u003dads-integrity-transparency\u0026obfuscatedCustomerId\u003d1094301298\u0026creativeId\u003d737994329704\u0026uiFeatures\u003d12,54\u0026adGroupId\u003d174933694974\u0026overlay\u003d%3DH4sIAAAAAAAAAPNS4OJPrShJLcpLzAnLTEnN90wR4uXi9svIjCorT0_0SckGAKRdLk0iAAAA\u0026sig\u003dACiVB_wYIsEham2xcMHpHj0kVWD3Q_ZTIA\u0026htmlParentId\u003dfletch-render-7459145636551444209\u0026responseCallback\u003dfletchCallback7459145636551444209"}},"4":3,"6":{"1":"1741647951","2":940430000},"7":{"1":"1743077847","2":537635000},"12":"COE Services Ltd","13":18}],"4":"3","5":"3"}
+
+================================================================================
+END OF DEBUG FILE
+================================================================================

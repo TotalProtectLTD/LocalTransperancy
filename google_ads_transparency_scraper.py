@@ -26,6 +26,14 @@ FEATURES:
    - Creative metadata
    - Ignores decoy/noise creatives
    
+✅ Bot Detection Evasion (optional, recommended)
+   - playwright-stealth integration for stealth browsing
+   - Hides automation indicators (navigator.webdriver, etc.)
+   - Prevents browser fingerprinting detection
+   - Randomized Chrome user agents (fake-useragent)
+   - Different user agent for each scraping session
+   - Can be toggled via ENABLE_STEALTH_MODE and USE_RANDOM_USER_AGENT constants
+   
 METHODS:
 --------
 Two methods to identify real videos (both achieve 100% accuracy):
@@ -85,6 +93,8 @@ REQUIREMENTS:
 - Python 3.7+
 - playwright: pip install playwright
 - playwright install chromium
+- playwright-stealth (optional, recommended): pip install playwright-stealth
+- fake-useragent (optional, recommended): pip install fake-useragent
 - mitmproxy (optional, for accurate traffic measurement)
 
 TRAFFIC OPTIMIZATION:
@@ -139,6 +149,26 @@ except ImportError:
     print("Then run: playwright install chromium")
     sys.exit(1)
 
+# Import playwright-stealth for bot detection evasion
+try:
+    from playwright_stealth import Stealth
+    STEALTH_AVAILABLE = True
+except ImportError:
+    STEALTH_AVAILABLE = False
+    print("⚠️  WARNING: playwright-stealth not installed")
+    print("   Install for better bot detection evasion: pip install playwright-stealth")
+    print("   Continuing without stealth mode...\n")
+
+# Import fake-useragent for randomized Chrome user agents
+try:
+    from fake_useragent import UserAgent
+    FAKE_USERAGENT_AVAILABLE = True
+except ImportError:
+    FAKE_USERAGENT_AVAILABLE = False
+    print("⚠️  WARNING: fake-useragent not installed")
+    print("   Install for randomized user agents: pip install fake-useragent")
+    print("   Using default user agent...\n")
+
 # Import app ID extraction from base64
 try:
     from extract_app_ids import extract_app_ids
@@ -175,12 +205,12 @@ GSTATIC_BLOCKED_PATTERNS = [
 # Timeout and interval settings (in seconds unless specified)
 PROXY_STARTUP_WAIT = 3  # seconds to wait for mitmproxy to start
 PROXY_SHUTDOWN_WAIT = 1  # seconds to wait after proxy shutdown
-PROXY_TERMINATION_TIMEOUT = 5  # timeout for proxy process termination
+PROXY_TERMINATION_TIMEOUT = 10  # timeout for proxy process termination
 SUBPROCESS_VERSION_CHECK_TIMEOUT = 1  # timeout for mitmdump version check
-PAGE_LOAD_TIMEOUT = 60000  # milliseconds for page.goto
-MAX_CONTENT_WAIT = 60  # maximum seconds to wait for dynamic content
+PAGE_LOAD_TIMEOUT = 30000  # milliseconds for page.goto
+MAX_CONTENT_WAIT = 30  # maximum seconds to wait for dynamic content
 CONTENT_CHECK_INTERVAL = 0.5  # seconds between content checks
-XHR_DETECTION_THRESHOLD = 10  # seconds to wait before declaring no XHR/fetch
+XHR_DETECTION_THRESHOLD = 15  # seconds to wait before declaring no XHR/fetch
 SEARCH_CREATIVES_WAIT = 3  # seconds to wait for SearchCreatives after empty GetCreativeById
 
 # Network configuration
@@ -203,10 +233,11 @@ PATTERN_FLETCH_RENDER_ID = r'fletch-render-(\d+)'  # extract fletch-render ID fr
 # YouTube video patterns
 PATTERN_YOUTUBE_THUMBNAIL = r'https?://i\d*\.ytimg\.com/vi/([a-zA-Z0-9_-]{11})/[^"\')\s]*'  # extract video ID from ytimg.com thumbnail URL
 PATTERN_YOUTUBE_VIDEO_ID_FIELD = r'(?:\\x27|["\'])video_id(?:\\x27|["\'])\s*:\s*(?:\\x27|["\'])([a-zA-Z0-9_-]{11})(?:\\x27|["\'])'  # extract video ID from video_id field with escaped quotes
+PATTERN_YOUTUBE_VIDEO_ID_CAMELCASE = r'(?:\\x27|["\'])video_videoId(?:\\x27|["\'])\s*:\s*(?:\\x27|["\'])([a-zA-Z0-9_-]{11})(?:\\x27|["\'])'  # extract video ID from video_videoId field (camelCase)
 
 # App Store ID patterns
 PATTERN_APPSTORE_STANDARD = r'(?:itunes|apps)\.apple\.com(?:/[a-z]{2})?/app/(?:[^/]+/)?id(\d{9,10})'  # standard Apple URL
-PATTERN_APPSTORE_ESCAPED = r'(?:itunes|apps)(?:%2E|\.)apple(?:%2E|\.)com(?:%2F|/|\\x2F)(?:[a-z]{2}(?:%2F|/|\\x2F))?app(?:%2F|/|\\x2F)id(\d{9,10})'  # URL-encoded Apple URL
+PATTERN_APPSTORE_ESCAPED = r'(?:itunes|apps)(?:%2E|\.)apple(?:%2E|\.)com(?:%2F|/|\\x2F)(?:[a-z]{2}(?:%2F|/|\\x2F))?app(?:%2F|/|\\x2F)(?:[a-zA-Z0-9_-]+(?:%2F|/|\\x2F))?id(\d{9,10})'  # URL-encoded Apple URL (with optional app name)
 PATTERN_APPSTORE_DIRECT = r'/app/id(\d{9,10})'  # direct app/id pattern
 PATTERN_APPSTORE_JSON = r'"appId"\s*:\s*"(\d{9,10})"'  # JSON appId field
 
@@ -235,6 +266,8 @@ FLETCH_RENDER_MARKER = 'fletch-render-'  # marker for dynamic content
 # Browser configuration
 BROWSER_HEADLESS = True  # run browser in headless mode
 BROWSER_ARGS = ['--disable-dev-shm-usage', '--disable-plugins']  # Chrome launch arguments
+ENABLE_STEALTH_MODE = True  # enable playwright-stealth for bot detection evasion (if available)
+USE_RANDOM_USER_AGENT = True  # use random Chrome user agent for each run (if fake-useragent available)
 
 # Thresholds and limits for validation and processing
 REQUEST_SIZE_OVERHEAD = 100  # bytes to add for request/response size estimation
@@ -558,6 +591,7 @@ def extract_youtube_videos_from_text(text: str) -> List[str]:
     Handles multiple patterns:
     - ytimg.com thumbnails: i.ytimg.com/vi/VIDEO_ID/
     - video_id field: 'video_id': 'VIDEO_ID' or "video_id": "VIDEO_ID"
+    - video_videoId field: 'video_videoId': 'VIDEO_ID' (camelCase variant)
     - Escaped quotes: \\x27video_id\\x27: \\x27VIDEO_ID\\x27
     
     Args:
@@ -575,6 +609,11 @@ def extract_youtube_videos_from_text(text: str) -> List[str]:
     # Pattern 2: video_id field (with regular or escaped quotes)
     # Matches: 'video_id': 'ID', "video_id": "ID", \x27video_id\x27: \x27ID\x27
     pattern = re.compile(PATTERN_YOUTUBE_VIDEO_ID_FIELD)
+    videos.extend(pattern.findall(text))
+    
+    # Pattern 3: video_videoId field (camelCase variant)
+    # Matches: 'video_videoId': 'ID', "video_videoId": "ID", \x27video_videoId\x27: \x27ID\x27
+    pattern = re.compile(PATTERN_YOUTUBE_VIDEO_ID_CAMELCASE)
     videos.extend(pattern.findall(text))
     
     return list(set(videos))
@@ -1402,6 +1441,33 @@ def extract_funded_by_from_api(
 # HELPER FUNCTIONS FOR MAIN SCRAPER
 # ============================================================================
 
+def _get_user_agent() -> str:
+    """
+    Get user agent string for browser context.
+    
+    Returns random Chrome user agent if fake-useragent is available and enabled,
+    otherwise returns default hardcoded user agent.
+    
+    Returns:
+        User agent string for browser configuration.
+    
+    Example:
+        ua = _get_user_agent()
+        # With fake-useragent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        # Without: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    """
+    if FAKE_USERAGENT_AVAILABLE and USE_RANDOM_USER_AGENT:
+        try:
+            ua = UserAgent(browsers=['Chrome'])
+            user_agent = ua.random
+            return user_agent
+        except Exception:
+            # Fallback to default if fake-useragent fails
+            return USER_AGENT
+    else:
+        return USER_AGENT
+
+
 async def _setup_proxy(
     use_proxy: bool,
     external_proxy: Optional[Dict[str, str]]
@@ -1511,12 +1577,14 @@ async def _setup_browser_context(
         Dictionary containing:
             - 'browser': Playwright Browser instance
             - 'context': Playwright BrowserContext instance with proxy configured
+            - 'user_agent': User agent string used for this session
     
     Example:
         async with async_playwright() as p:
             result = await _setup_browser_context(p, use_proxy=True, external_proxy=None)
             browser = result['browser']
             context = result['context']
+            user_agent = result['user_agent']
             page = await context.new_page()
             # ... use page ...
             await browser.close()
@@ -1525,7 +1593,7 @@ async def _setup_browser_context(
         Browser is launched with:
         - Headless mode (configurable via BROWSER_HEADLESS constant)
         - Custom Chrome arguments (BROWSER_ARGS: disable-dev-shm-usage, disable-plugins)
-        - Custom user agent (USER_AGENT constant)
+        - Random Chrome user agent (if fake-useragent available) or default USER_AGENT
         - HTTPS error ignoring when proxy is active
     """
     browser = await p.chromium.launch(
@@ -1533,10 +1601,13 @@ async def _setup_browser_context(
         args=BROWSER_ARGS
     )
     
+    # Get user agent (random Chrome if fake-useragent available, otherwise default)
+    user_agent = _get_user_agent()
+    
     # Set proxy at context level (not browser level) for per-request control
     # This allows route handlers to selectively block requests
     context_options = {
-        'user_agent': USER_AGENT,
+        'user_agent': user_agent,
         'ignore_https_errors': use_proxy or bool(external_proxy)
     }
     
@@ -1549,7 +1620,7 @@ async def _setup_browser_context(
     
     context = await browser.new_context(**context_options)
     
-    return {'browser': browser, 'context': context}
+    return {'browser': browser, 'context': context, 'user_agent': user_agent}
 
 
 def _create_route_handler(tracker: 'TrafficTracker') -> Callable[[Any], Awaitable[None]]:
@@ -2067,6 +2138,7 @@ def _extract_data(
         Video extraction uses multiple regex patterns to handle different formats:
         - ytimg.com thumbnail URLs
         - video_id JSON fields (with regular or escaped quotes)
+        - video_videoId JSON fields (camelCase variant)
         
         App Store ID extraction handles multiple URL formats:
         - Standard: apps.apple.com/us/app/id123456789
@@ -2505,6 +2577,16 @@ async def scrape_ads_transparency_page(
         browser_setup = await _setup_browser_context(p, use_proxy, external_proxy)
         browser = browser_setup['browser']
         context = browser_setup['context']
+        user_agent = browser_setup['user_agent']
+        
+        # Print user agent info
+        if FAKE_USERAGENT_AVAILABLE and USE_RANDOM_USER_AGENT:
+            # Extract Chrome version from user agent
+            chrome_version_match = re.search(r'Chrome/([\d.]+)', user_agent)
+            chrome_version = chrome_version_match.group(1) if chrome_version_match else 'unknown'
+            print(f"🎭 User Agent: Random Chrome {chrome_version}")
+        else:
+            print(f"🎭 User Agent: Default (static)")
         
         # Create and register handlers
         content_js_responses = []
@@ -2516,6 +2598,13 @@ async def scrape_ads_transparency_page(
         response_handler = _create_response_handler(tracker, content_js_responses, all_xhr_fetch_requests)
         
         page = await context.new_page()
+        
+        # Apply stealth mode if available and enabled
+        if STEALTH_AVAILABLE and ENABLE_STEALTH_MODE:
+            await Stealth().apply_stealth_async(page)
+            print("🕵️  Stealth mode: ENABLED (bot detection evasion active)")
+        elif ENABLE_STEALTH_MODE and not STEALTH_AVAILABLE:
+            print("⚠️  Stealth mode: DISABLED (playwright-stealth not installed)")
         
         # Set up event listeners
         page.on('request', lambda req: tracker.on_request(req))

@@ -35,6 +35,8 @@ def create_tables():
             video_count INTEGER DEFAULT 0,
             video_ids JSONB,
             appstore_id TEXT,
+            funded_by TEXT DEFAULT NULL,
+            sync BOOLEAN DEFAULT FALSE,
             scraped_at TIMESTAMP,
             error_message TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -83,6 +85,8 @@ def create_tables():
             video_count INTEGER DEFAULT 0,
             video_ids TEXT,
             appstore_id TEXT,
+            funded_by TEXT DEFAULT NULL,
+            sync BOOLEAN DEFAULT FALSE,
             scraped_at TIMESTAMP,
             error_message TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -9,10 +9,9 @@ Features:
 - Continuous worker pool (no idle time between batches)
 - Configurable concurrency limit
 - Reads creative URLs from PostgreSQL creatives_fresh table
-- Updates database with results (videos, app store ID, errors)
+- Updates database with results (videos, app store ID, funded_by, errors)
 - Real-time progress logging with rate statistics
 - Static proxy support with IP logging
-- Optional TXT file logging
 
 Usage:
     # Process all pending URLs with 10 concurrent workers
@@ -24,8 +23,8 @@ Usage:
     # Without proxy
     python3 stress_test_scraper.py --max-concurrent 10 --no-proxy
     
-    # With TXT file logging enabled
-    python3 stress_test_scraper.py --max-concurrent 10 --enable-txt-logging
+    # With IP rotation enabled
+    python3 stress_test_scraper.py --max-concurrent 10 --enable-rotation
 """
 
 import asyncio
@@ -67,14 +66,11 @@ DB_CONFIG = {
     'port': 5432
 }
 
-# Log file (optional)
-LOG_FILE = "stress_test_results.txt"
-
 # Proxy Configuration (optional - if not provided, uses no proxy)
-PROXY_HOST = "us10.4g.iproyal.com"
-PROXY_PORT = 8022
-PROXY_USERNAME = "46W2VQL"
-PROXY_PASSWORD = "ITT6t5yqeQUn3L4"
+PROXY_HOST = "lt2.4g.iproyal.com"
+PROXY_PORT = 6217
+PROXY_USERNAME = "5WuSD1W"
+PROXY_PASSWORD = "sp9YURcDXb0Mjxx"
 
 # IP Rotation Configuration
 IPROYAL_ROTATE_URL = "https://apid.iproyal.com/v1/orders/59934727/rotate-ip/9vZGSTaLoF"
@@ -86,9 +82,6 @@ _last_rotation_time: Optional[float] = None
 _rotation_in_progress: bool = False
 _active_workers_count: int = 0
 _workers_lock = None  # Will be initialized in async context
-
-# Global state for TXT logging
-_enable_txt_logging: bool = False
 
 
 # ============================================================================
@@ -139,7 +132,7 @@ def get_pending_urls(limit: int = 10) -> List[Dict[str, Any]]:
             SELECT id, creative_id, advertiser_id
             FROM creatives_fresh
             WHERE status = 'pending'
-            ORDER BY id
+            ORDER BY RANDOM()
             LIMIT %s
         """, (limit,))
         
@@ -209,7 +202,8 @@ def classify_error(error_msg: str) -> tuple[bool, str, str]:
         'ERR_CONNECTION_REFUSED',
         'ERR_TUNNEL_CONNECTION_FAILED',
         'TimeoutError',
-        'Timeout'
+        'Timeout',
+        'BrokenPipeError'
     ]
     
     for err_type in network_errors:
@@ -224,9 +218,17 @@ def update_result(creative_id: int, result: Dict[str, Any]):
     """
     Update PostgreSQL creatives_fresh table with scraping result.
     
-    - Retryable errors (incomplete fletch-render, network errors) are marked as 'pending' for retry
-    - Bad ads (broken creative pages) are marked as 'failed' with 'Bad ad' error
-    - Other failures are marked as 'failed' with full error details
+    Database status handling:
+    - Success → status='completed', error_message=NULL
+    - Retryable errors (network, incomplete data) → status='pending', error_message="ERROR_TYPE - pending retry"
+    - Bad ads (creative not found) → status='bad_ad', error_message="Creative not found in API..."
+    - Other permanent errors → status='failed', error_message="PERMANENT ERROR: <full details>"
+    
+    The PERMANENT ERROR prefix helps identify unexpected failures for debugging.
+    Use query_errors.sql to analyze these errors in detail.
+    
+    Updates the following fields on success:
+    - video_count, video_ids, appstore_id, funded_by, scraped_at, error_message
     
     Args:
         creative_id: Database ID of the creative
@@ -242,6 +244,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                     video_count = %s,
                     video_ids = %s,
                     appstore_id = %s,
+                    funded_by = %s,
                     scraped_at = %s,
                     error_message = NULL
                 WHERE id = %s
@@ -249,6 +252,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                 result.get('video_count', 0),
                 json.dumps(result.get('videos', [])),
                 result.get('appstore_id'),
+                result.get('funded_by'),
                 datetime.utcnow(),
                 creative_id
             ))
@@ -268,20 +272,22 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                     creative_id
                 ))
             elif error_category == 'bad_ad':
-                # Mark as failed - bad ad (broken creative page, permanent)
+                # Mark as bad_ad - creative doesn't exist (broken creative page, permanent)
                 cursor.execute("""
                     UPDATE creatives_fresh
-                    SET status = 'failed',
+                    SET status = 'bad_ad',
                         error_message = %s,
                         scraped_at = %s
                     WHERE id = %s
                 """, (
-                    "Bad ad - broken creative page",
+                    "Creative not found in API - broken/deleted creative page",
                     datetime.utcnow(),
                     creative_id
                 ))
             else:
                 # Mark as failed (other permanent failure)
+                # Store FULL error message with detailed information for debugging
+                detailed_error = f"PERMANENT ERROR: {error_msg}"
                 cursor.execute("""
                     UPDATE creatives_fresh
                     SET status = 'failed',
@@ -289,7 +295,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                         scraped_at = %s
                     WHERE id = %s
                 """, (
-                    error_msg,
+                    detailed_error,
                     datetime.utcnow(),
                     creative_id
                 ))
@@ -313,7 +319,8 @@ def get_statistics() -> Dict[str, int]:
             'pending': status_counts.get('pending', 0),
             'processing': status_counts.get('processing', 0),
             'completed': status_counts.get('completed', 0),
-            'failed': status_counts.get('failed', 0)
+            'failed': status_counts.get('failed', 0),
+            'bad_ad': status_counts.get('bad_ad', 0)
         }
 
 
@@ -519,6 +526,7 @@ async def scrape_single_url(creative: Dict[str, Any], proxy_config: Optional[Dic
             'videos': result.get('videos', []),
             'video_count': result.get('video_count', 0),
             'appstore_id': result.get('app_store_id'),
+            'funded_by': result.get('funded_by'),
             'real_creative_id': result.get('real_creative_id'),
             'duration_ms': result.get('duration_ms', 0),
             'error': '; '.join(result.get('errors', [])) if not result.get('success') else None
@@ -534,65 +542,9 @@ async def scrape_single_url(creative: Dict[str, Any], proxy_config: Optional[Dic
             'duration_ms': duration,
             'videos': [],
             'video_count': 0,
-            'appstore_id': None
+            'appstore_id': None,
+            'funded_by': None
         }
-
-
-# ============================================================================
-# LOGGING
-# ============================================================================
-
-def log_to_file(message: str):
-    """Append message to log file (only if TXT logging is enabled)."""
-    if _enable_txt_logging:
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(message + '\n')
-
-
-def log_result(creative: Dict[str, Any], result: Dict[str, Any]):
-    """
-    Log scraping result to file (only if TXT logging is enabled).
-    
-    - Retryable errors: logged as 'pending-retry' with simplified error (e.g., "ERR_TIMED_OUT")
-    - Bad ads: logged as 'failed' with "Bad ad"
-    - Other failures: logged as 'failed' with full error details
-    
-    Format: timestamp | url | status | video_count | video_ids | appstore_id | duration_ms | error
-    """
-    if not _enable_txt_logging:
-        return
-        
-    timestamp = datetime.utcnow().isoformat()
-    url = creative['url']
-    
-    # Determine status and error message
-    if result['success']:
-        status = 'success'
-        error = ''
-    else:
-        error_msg = result.get('error', '')
-        should_retry, error_type, error_category = classify_error(error_msg)
-        
-        if should_retry:
-            status = 'pending-retry'
-            # Simplified error message - just the error type
-            error = error_type
-        elif error_category == 'bad_ad':
-            status = 'failed'
-            # Simplified error for bad ads
-            error = 'Bad ad'
-        else:
-            status = 'failed'
-            # Keep full error for other permanent failures
-            error = error_msg
-    
-    video_count = result.get('video_count', 0)
-    video_ids = ','.join(result.get('videos', [])) if result.get('videos') else ''
-    appstore_id = result.get('appstore_id', '')
-    duration_ms = int(result.get('duration_ms', 0))
-    
-    log_line = f"{timestamp} | {url} | {status} | {video_count} | {video_ids} | {appstore_id} | {duration_ms} | {error}"
-    log_to_file(log_line)
 
 
 # ============================================================================
@@ -648,9 +600,6 @@ async def worker(
                 # Update database
                 update_result(creative['id'], result)
                 
-                # Log to file
-                log_result(creative, result)
-                
                 # Update shared statistics
                 async with stats_lock:
                     stats['processed'] += 1
@@ -683,7 +632,7 @@ async def worker(
                     _active_workers_count -= 1
 
 
-async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = None, use_proxy: bool = True, force_rotation: bool = False, enable_rotation: bool = False, enable_txt_logging: bool = False):
+async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = None, use_proxy: bool = True, force_rotation: bool = False, enable_rotation: bool = False):
     """
     Run stress test with continuous worker pool.
     
@@ -693,23 +642,10 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
         use_proxy: If True, use configured proxy; if False, no proxy
         force_rotation: If True, force IP rotation even if within cooldown period
         enable_rotation: If True, enable automatic IP rotation every 7 minutes
-        enable_txt_logging: If True, enable TXT file logging
     """
     print("="*80)
     print("GOOGLE ADS TRANSPARENCY CENTER - STRESS TEST")
     print("="*80)
-    
-    # Set global TXT logging flag
-    global _enable_txt_logging
-    _enable_txt_logging = enable_txt_logging
-    
-    # Initialize log file
-    if _enable_txt_logging:
-        log_to_file("\n" + "="*80)
-        log_to_file(f"STRESS TEST STARTED: {datetime.utcnow().isoformat()}")
-        log_to_file("="*80)
-        log_to_file("timestamp;url;status;video_count;video_ids;appstore_id;duration_ms;error")
-        log_to_file("-"*80)
     
     # Get initial statistics
     db_stats = get_statistics()
@@ -719,6 +655,7 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
     print(f"  Processing: {db_stats['processing']}")
     print(f"  Completed:  {db_stats['completed']}")
     print(f"  Failed:     {db_stats['failed']}")
+    print(f"  Bad ads:    {db_stats['bad_ad']}")
     
     if db_stats['pending'] == 0:
         print("\n⚠️  No pending URLs found in database")
@@ -836,18 +773,7 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
     print(f"Success rate:     {stats['success']/stats['processed']*100:.1f}%" if stats['processed'] > 0 else "N/A")
     print(f"Average rate:     {stats['processed']/total_duration:.2f} URL/s" if total_duration > 0 else "N/A")
     print(f"IP used:          {current_ip}")
-    if _enable_txt_logging:
-        print(f"\nResults logged to: {LOG_FILE}")
-    print(f"Database:          PostgreSQL (creatives_fresh table)")
-    
-    # Log final summary
-    if _enable_txt_logging:
-        log_to_file("-"*80)
-        log_to_file(f"STRESS TEST COMPLETED: {datetime.utcnow().isoformat()}")
-        retry_info = f" | Retries: {stats['retries']}" if stats['retries'] > 0 else ""
-        bad_ads_info = f" | Bad ads: {stats['bad_ads']}" if stats['bad_ads'] > 0 else ""
-        log_to_file(f"Duration: {total_duration:.1f}s | Processed: {stats['processed']} | Success: {stats['success']} | Failed: {stats['failed']}{bad_ads_info}{retry_info} | Rate: {stats['processed']/total_duration:.2f} URL/s")
-        log_to_file("="*80 + "\n")
+    print(f"Database:         PostgreSQL (creatives_fresh table)")
 
 
 def main():
@@ -871,9 +797,6 @@ Examples:
   # Without proxy
   %(prog)s --max-concurrent 10 --no-proxy
   
-  # With TXT file logging enabled
-  %(prog)s --max-concurrent 10 --enable-txt-logging
-  
   # High concurrency with rotation (careful with rate limits!)
   %(prog)s --max-concurrent 50 --enable-rotation
 
@@ -895,8 +818,6 @@ IP Rotation:
                         help='Enable automatic IP rotation every 7 minutes')
     parser.add_argument('--force-rotation', action='store_true',
                         help='Force IP rotation once at startup (bypasses 7-minute cooldown)')
-    parser.add_argument('--enable-txt-logging', action='store_true',
-                        help='Enable TXT file logging (default: disabled)')
     
     args = parser.parse_args()
     
@@ -906,8 +827,7 @@ IP Rotation:
             max_urls=args.max_urls,
             use_proxy=not args.no_proxy,
             force_rotation=args.force_rotation,
-            enable_rotation=args.enable_rotation,
-            enable_txt_logging=args.enable_txt_logging
+            enable_rotation=args.enable_rotation
         ))
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")
