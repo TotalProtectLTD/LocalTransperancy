@@ -1,0 +1,17 @@
+# Local Transparency - Python Requirements
+# Python 3.7+ required
+
+# Core Dependencies
+playwright>=1.40.0
+httpx>=0.25.0
+
+# Database
+psycopg2-binary>=2.9.0  # PostgreSQL adapter for Python (binary package, no compilation needed)
+
+# BigQuery Integration
+google-cloud-bigquery>=3.11.0
+google-cloud-storage>=2.10.0
+
+# Optional Dependencies (for advanced features)
+mitmproxy>=10.0.0  # Optional: for accurate traffic measurement (use --proxy flag)
+

@@ -46,15 +46,6 @@ Basic usage:
     
 With proxy (accurate traffic measurement):
     python3 google_ads_transparency_scraper.py <URL> --proxy
-
-With default external proxy (IPRoyal us9.4g.iproyal.com:7606):
-    python3 google_ads_transparency_scraper.py <URL> --use-default-proxy
-
-With custom external proxy:
-    python3 google_ads_transparency_scraper.py <URL> \\
-        --proxy-server "proxy.example.com:8022" \\
-        --proxy-username "user" \\
-        --proxy-password "pass"
     
 With debug mode (saves App Store ID extraction details):
     python3 google_ads_transparency_scraper.py <URL> --debug-extra-information
@@ -143,17 +134,6 @@ GSTATIC_BLOCKED_PATTERNS = [
     '/_/js/k=og.qtm',  # Block optional JS
     '/_/ss/k=og.qtm'   # Block CSS
 ]
-
-# Default external proxy configuration (IPRoyal)
-# These credentials are used when --use-default-proxy flag is set
-DEFAULT_PROXY_CONFIG = {
-    'server': 'us9.4g.iproyal.com',
-    'https_port': 7606,
-    'socks5_port': 3606,
-    'username': 'AqhcTNx',
-    'password': '9nSWUDRGQcsnZiq',
-    'api_key': 'mf8n46772h'
-}
 
 # Mitmproxy addon for accurate traffic measurement
 PROXY_ADDON_SCRIPT = '''
@@ -366,16 +346,16 @@ def extract_app_store_id_from_text(text):
     """
     patterns = [
         (
-            re.compile(r'(?:itunes|apps)\.apple\.com(?:/[a-z]{2})?/app/id(\d{9,10})', re.IGNORECASE),
-            "Pattern 1: Standard Apple URL (apps.apple.com or itunes.apple.com with optional country code)"
+            re.compile(r'(?:itunes|apps)\.apple\.com(?:/[a-z]{2})?/app/(?:[^/]+/)?id(\d{9,10})', re.IGNORECASE),
+            "Pattern 1: Standard Apple URL (apps.apple.com or itunes.apple.com with optional country code and app name)"
         ),
         (
             re.compile(r'(?:itunes|apps)(?:%2E|\.)apple(?:%2E|\.)com(?:%2F|/|\\x2F)(?:[a-z]{2}(?:%2F|/|\\x2F))?app(?:%2F|/|\\x2F)id(\d{9,10})', re.IGNORECASE),
             "Pattern 2: Escaped Apple URL (URL encoded %2F, hex escaped \\x2F, etc.)"
         ),
         (
-        re.compile(r'(?:app[=/:]|id[=/:]?)(\d{9,10})'),
-            "Pattern 3: Generic app/id pattern (app=, app:, id=, id:, or id)"
+            re.compile(r'/app/id(\d{9,10})', re.IGNORECASE),
+            "Pattern 3: Direct app/id pattern (/app/id followed by 9-10 digits)"
         ),
         (
         re.compile(r'"appId"\s*:\s*"(\d{9,10})"'),
@@ -817,26 +797,23 @@ def check_if_static_cached_creative(api_responses, page_url):
     return None
 
 
-def check_if_empty_api_response(api_responses, page_url):
+def check_empty_get_creative_by_id(api_responses, page_url):
     """
-    Check if GetCreativeById returned empty/no data.
-    
-    This detects when GetCreativeById response is minimal (empty object or very small),
-    indicating the creative doesn't exist, was deleted, or is not accessible.
+    Check if GetCreativeById returned empty {} for the target creative.
     
     Args:
         api_responses: List of captured API responses
         page_url: Full page URL containing creative ID
         
     Returns:
-        dict or None: {'is_empty': True, 'creative_id': 'CR...', 'reason': '...'} if empty, None otherwise
+        bool: True if GetCreativeById is empty, False otherwise
     """
     # Extract creative ID from URL
     match = re.search(r'/creative/(CR\d+)', page_url)
     if not match:
-        return None
+        return False
     
-    url_creative_id = match.group(1)
+    page_creative_id = match.group(1)
     
     # Find GetCreativeById response
     for api_resp in api_responses:
@@ -844,45 +821,66 @@ def check_if_empty_api_response(api_responses, page_url):
             continue
         
         try:
-            text = api_resp.get('text', '')
+            text = api_resp.get('text', '').strip()
             
-            # Check if response is empty or minimal
-            # Empty responses are typically: {}, [], or very small JSON (< 100 bytes)
-            if not text or len(text.strip()) < 100:
-                return {
-                    'is_empty': True,
-                    'creative_id': url_creative_id,
-                    'reason': 'GetCreativeById returned empty response (creative may be deleted or not accessible)'
-                }
+            # Check if response is empty {}
+            if text == '{}':
+                return True
             
-            # Check if it's just empty JSON object/array
-            text_stripped = text.strip()
-            if text_stripped in ['{}', '[]', 'null', '""']:
-                return {
-                    'is_empty': True,
-                    'creative_id': url_creative_id,
-                    'reason': 'GetCreativeById returned empty JSON (creative may be deleted or not accessible)'
-                }
+            # Also check if it's valid JSON but doesn't contain our creative
+            data = json.loads(text)
+            response_creative_id = data.get('1', {}).get('2', '')
             
-            # Try to parse as JSON and check if it's effectively empty
-            try:
-                import json
-                data = json.loads(text)
-                # If it's an empty dict, empty list, or None
-                if not data or (isinstance(data, (dict, list)) and len(data) == 0):
-                    return {
-                        'is_empty': True,
-                        'creative_id': url_creative_id,
-                        'reason': 'GetCreativeById returned no data (creative may be deleted or not accessible)'
-                    }
-            except (json.JSONDecodeError, TypeError):
-                # If can't parse, assume it has some content
-                pass
+            # If it has data but for a different creative, keep looking
+            if response_creative_id and response_creative_id != page_creative_id:
+                continue
             
-        except Exception:
+            # If it has data for our creative, not empty
+            if response_creative_id == page_creative_id:
+                return False
+                
+        except (json.JSONDecodeError, KeyError):
             continue
     
-    return None
+    return False
+
+
+def check_creative_in_search_creatives(api_responses, page_url):
+    """
+    Check if the target creative exists in SearchCreatives response.
+    
+    Args:
+        api_responses: List of captured API responses
+        page_url: Full page URL containing creative ID
+        
+    Returns:
+        bool: True if creative found in SearchCreatives, False otherwise
+    """
+    # Extract creative ID from URL
+    match = re.search(r'/creative/(CR\d+)', page_url)
+    if not match:
+        return False
+    
+    page_creative_id = match.group(1)
+    
+    # Check SearchCreatives responses
+    for api_resp in api_responses:
+        if 'SearchCreatives' not in api_resp.get('url', ''):
+            continue
+        
+        try:
+            data = json.loads(api_resp.get('text', ''))
+            creatives_list = data.get('1', [])
+            
+            for creative in creatives_list:
+                creative_id = creative.get('2', '')
+                if creative_id == page_creative_id:
+                    return True
+                    
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+    
+    return False
 
 
 def extract_real_creative_id_from_api(api_responses, page_url):
@@ -1005,7 +1003,7 @@ def extract_real_creative_id_by_frequency(content_js_requests):
 # MAIN SCRAPER
 # ============================================================================
 
-async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy=None, debug_appstore=False, debug_fletch=False, debug_content=False, use_blocking=True):
+async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy=None, debug_appstore=False, debug_fletch=False, debug_content=False):
     """
     Scrape Google Ads Transparency page with optimized traffic and real video detection.
     
@@ -1016,7 +1014,6 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         debug_content: If True, save debug files for frequency method (creative-id) content.js responses
         use_proxy: If True, uses mitmproxy for accurate traffic measurement (deprecated if external_proxy provided)
         external_proxy: Dict with proxy config {'server': 'host:port', 'username': 'user', 'password': 'pass'}
-        use_blocking: If True, use BLOCKED_URL_PATTERNS to block requests (default: True)
         
     Returns:
         dict: Complete scraping results with videos, traffic stats, etc.
@@ -1090,11 +1087,6 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
             url = route.request.url
             resource_type = route.request.resource_type
             
-            # If blocking is disabled, allow all requests
-            if not use_blocking:
-                await route.continue_()
-                return
-            
             # Block images, fonts, and stylesheets
             if resource_type in ['image', 'font', 'stylesheet']:
                 tracker.url_blocked_count += 1
@@ -1129,9 +1121,18 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         
         # Capture responses
         content_js_responses = []  # List of (url, text) tuples
+        all_xhr_fetch_requests = []  # Track ALL XHR/fetch for debugging
         
         async def handle_response(response):
             url = response.url
+            
+            # Track ALL XHR/fetch requests for debugging "No API" cases
+            if response.request.resource_type in ['xhr', 'fetch']:
+                all_xhr_fetch_requests.append({
+                    'url': url,
+                    'status': response.status,
+                    'timestamp': time.time()
+                })
             
             # Capture API responses (GetCreativeById, SearchCreatives, etc.)
             if response.request.resource_type in ['xhr', 'fetch']:
@@ -1177,7 +1178,7 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         print("Waiting for dynamic content...")
         
         # Smart wait: wait for ALL expected content.js using fletch-render IDs from API
-        max_wait = 30  # seconds (API-only mode, exits early when fletch-renders found)
+        max_wait = 60  # seconds (increased for reliability, but smart wait exits early)
         check_interval = 0.5  # seconds
         elapsed = 0
         expected_fletch_renders = set()
@@ -1188,7 +1189,57 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         # Track static content detection
         static_content_detected = None
         
+        # Track empty GetCreativeById detection for early exit
+        empty_get_creative_detected = False
+        empty_get_creative_detection_time = None
+        
         while elapsed < max_wait:
+            # Early exit: If no XHR/fetch requests after 10 seconds, API won't come
+            if elapsed >= 10 and len(all_xhr_fetch_requests) == 0:
+                print(f"  ⚠️  No XHR/fetch requests detected after {elapsed:.1f}s")
+                print(f"  ⚠️  JavaScript may not be executing - exiting wait early")
+                break
+            
+            # Smart detection: Early exit for empty GetCreativeById
+            if not empty_get_creative_detected and len(tracker.api_responses) > 0:
+                # Check if GetCreativeById is empty
+                if check_empty_get_creative_by_id(tracker.api_responses, page_url):
+                    empty_get_creative_detected = True
+                    empty_get_creative_detection_time = elapsed
+                    
+                    # Check if SearchCreatives already exists
+                    has_search_creatives = any('SearchCreatives' in resp.get('url', '') for resp in tracker.api_responses)
+                    
+                    if has_search_creatives:
+                        # SearchCreatives already arrived, check if creative is in it
+                        creative_in_search = check_creative_in_search_creatives(tracker.api_responses, page_url)
+                        
+                        if not creative_in_search:
+                            print(f"  ⚠️  Empty GetCreativeById + creative not in SearchCreatives")
+                            print(f"  ⚠️  Creative not found - exiting wait early at {elapsed:.1f}s")
+                            break
+                    else:
+                        # SearchCreatives not yet arrived, will wait 3 seconds
+                        print(f"  ⚠️  Empty GetCreativeById detected at {elapsed:.1f}s")
+                        print(f"  ⚠️  Waiting 3s for SearchCreatives to arrive...")
+            
+            # Check if 3 seconds passed since empty GetCreativeById detection
+            if empty_get_creative_detected and empty_get_creative_detection_time is not None:
+                if elapsed >= empty_get_creative_detection_time + 3:
+                    # 3 seconds passed, check again
+                    has_search_creatives = any('SearchCreatives' in resp.get('url', '') for resp in tracker.api_responses)
+                    
+                    if has_search_creatives:
+                        creative_in_search = check_creative_in_search_creatives(tracker.api_responses, page_url)
+                        if not creative_in_search:
+                            print(f"  ⚠️  Creative not in SearchCreatives after 3s wait")
+                            print(f"  ⚠️  Creative not found - exiting wait early at {elapsed:.1f}s")
+                            break
+                    else:
+                        print(f"  ⚠️  SearchCreatives not arrived after 3s wait")
+                        print(f"  ⚠️  Creative likely not found - exiting wait early at {elapsed:.1f}s")
+                        break
+            
             # Step 1: ALWAYS recheck API responses (most accurate method)
             # Check if new API responses have arrived since last check
             current_api_count = len(tracker.api_responses)
@@ -1203,18 +1254,6 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
                     print(f"   Creative ID: {static_check['creative_id']}")
                     print(f"   No dynamic content.js needed - exiting wait early")
                     static_content_detected = static_check
-                    break
-                
-                # Second, check if GetCreativeById returned empty/no data
-                empty_api_check = check_if_empty_api_response(tracker.api_responses, page_url)
-                if empty_api_check:
-                    print(f"\n❌ Empty API response detected!")
-                    print(f"   Creative ID: {empty_api_check['creative_id']}")
-                    print(f"   Reason: {empty_api_check['reason']}")
-                    print(f"   No need to wait further - exiting early")
-                    # Store this for later processing
-                    if not hasattr(tracker, 'empty_api_detected'):
-                        tracker.empty_api_detected = empty_api_check
                     break
                 
                 # New API response arrived! Extract fletch-render IDs
@@ -1259,11 +1298,8 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
                     print(f"  ✅ Got ALL {len(expected_fletch_renders)} expected content.js responses in {elapsed:.1f}s!")
                     break
             
-            # Step 3: No fallback - API-only mode
-            # If no fletch-renders found, we wait full duration to ensure all API responses arrive
-            # Frequency method is DISABLED - we only use API method for reliability
-            #
-            # # Step 3: Fallback - DISABLED (frequency method removed)
+            # Step 3: Fallback - if no API or no fletch-renders, use smart frequency-based waiting - COMMENTED OUT
+            # Wait for 2+ content.js with SAME creative ID, then progressive 3s waits
             # if not expected_fletch_renders:
             #     # Analyze creative ID frequency in current content.js responses
             #     creative_freq = Counter()
@@ -1368,14 +1404,6 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
             page_url
         )
     
-    # Check for empty API response (from wait loop or now)
-    empty_api_info = None
-    if hasattr(tracker, 'empty_api_detected'):
-        empty_api_info = tracker.empty_api_detected
-    else:
-        # Final check if not detected during wait
-        empty_api_info = check_if_empty_api_response(tracker.api_responses, page_url)
-    
     # ========================================================================
     # IDENTIFY REAL CREATIVE ID
     # ========================================================================
@@ -1387,15 +1415,8 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
     real_creative_id = None
     method_used = None
     
-    # Check if GetCreativeById returned empty (highest priority - no data available)
-    if empty_api_info:
-        print(f"❌ No API data detected:")
-        print(f"   Creative ID: {empty_api_info['creative_id']}")
-        print(f"   Reason: {empty_api_info['reason']}")
-        method_used = 'no-api-data'
-        # Don't set real_creative_id - there's no data to extract
     # Check if this is static/cached content
-    elif static_content_info:
+    if static_content_info:
         print(f"ℹ️  Detected static/cached content:")
         print(f"   Creative ID: {static_content_info['creative_id']}")
         print(f"   Reason: {static_content_info['reason']}")
@@ -1403,23 +1424,15 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         method_used = 'static-detected'
         # Don't set real_creative_id - this prevents guessing from wrong content.js files
     else:
-        # API method only (no frequency fallback)
+        # Method 1: Try API method
         real_creative_id = extract_real_creative_id_from_api(tracker.api_responses, page_url)
         
         if real_creative_id:
             method_used = 'api'
             print(f"✅ API Method: Real creative ID = {real_creative_id}")
-            print(f"   (Extracted from GetCreativeById or SearchCreatives API response)")
+            print(f"   (Extracted from GetCreativeById API response)")
         else:
-            print("❌ API method failed - could not identify real creative ID")
-            print("   GetCreativeById and SearchCreatives APIs returned no valid data")
-            method_used = 'api-failed'
-            
-            # FREQUENCY METHOD DISABLED - API-only mode for stability
-            # Frequency method is unreliable and can pick wrong creatives
-            # If API fails, it's better to report failure than guess incorrectly
-            #
-            # # Method 2: Fallback to frequency (DISABLED)
+            # Method 2: Fallback to frequency - COMMENTED OUT
             # print("⚠️  API method failed, trying frequency method...")
             # real_creative_id = extract_real_creative_id_by_frequency(tracker.content_js_requests)
             # 
@@ -1430,8 +1443,8 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
             #     print(f"✅ Frequency Method: Real creative ID = {real_creative_id}")
             #     print(f"   (Appears {freq[real_creative_id]} times, others appear 1 time each)")
             # else:
-            #     print("❌ Could not identify real creative ID!")
-            #     method_used = 'none'
+            print("❌ Could not identify real creative ID!")
+            method_used = 'api-failed'
     
     # ========================================================================
     # EXTRACT VIDEOS FROM MATCHED CONTENT.JS
@@ -1446,15 +1459,8 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
     app_store_id = None
     extraction_method = None
     
-    # SKIP EXTRACTION FOR EMPTY API RESPONSE
-    if empty_api_info:
-        extraction_method = 'no-api-data'
-        unique_videos = []
-        print("\n❌ No API data - skipping extraction")
-        print(f"   {empty_api_info['reason']}")
-        print(f"   Cannot extract videos/apps without API data")
     # SKIP EXTRACTION FOR STATIC/CACHED CONTENT
-    elif static_content_info:
+    if static_content_info:
         extraction_method = 'static-content'
         unique_videos = []
         content_type = static_content_info.get('content_type', 'unknown')
@@ -1514,66 +1520,66 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         for vid in unique_videos:
             print(f"   • {vid}")
     
-    # FALLBACK METHOD: Use creative ID matching
-    elif real_creative_id:
-        extraction_method = 'creative-id'
-        print(f"\nUsing creative ID matching (fallback method)")
-        print(f"Processing content.js requests with creative ID: {real_creative_id}")
-        
-        content_file_index = 0
-        for url, text in content_js_responses:
-            # Extract creative ID from this request
-            match = re.search(r'creativeId=(\d{12})', url)
-            if not match:
-                continue
-            
-            request_creative_id = match.group(1)
-            
-            # Only process requests with the real creative ID
-            if request_creative_id == real_creative_id:
-                content_file_index += 1
-                
-                # Save debug file if content debug mode enabled
-                if debug_content:
-                    save_content_debug_file(
-                        request_creative_id,
-                        text,
-                        url,
-                        content_file_index
-                    )
-                
-                # Extract videos from this request
-                videos = extract_youtube_videos_from_text(text)
-                
-                if videos:
-                    videos_by_request.append({
-                        'url': url[:100] + '...',
-                        'videos': list(set(videos))
-                    })
-                    all_videos.extend(videos)
-                    print(f"  Found {len(set(videos))} video(s) in request")
-            
-                # Extract App Store ID from real creative only
-            if not app_store_id:
-                    result = extract_app_store_id_from_text(text)
-                    if result:
-                        app_store_id, pattern_description = result
-                        if debug_appstore:
-                            save_appstore_debug_file(
-                                app_store_id, 
-                                text, 
-                                'creative-id', 
-                                url, 
-                                request_creative_id,
-                                pattern_description
-                            )
-        
-        # Deduplicate videos
-        unique_videos = list(set(all_videos))
-        
-        print(f"\n✅ Total unique videos extracted: {len(unique_videos)}")
-        for vid in unique_videos:
-            print(f"   • {vid}")
+    # FALLBACK METHOD: Use creative ID matching - COMMENTED OUT
+    # elif real_creative_id:
+    #     extraction_method = 'creative-id'
+    #     print(f"\nUsing creative ID matching (fallback method)")
+    #     print(f"Processing content.js requests with creative ID: {real_creative_id}")
+    #     
+    #     content_file_index = 0
+    #     for url, text in content_js_responses:
+    #         # Extract creative ID from this request
+    #         match = re.search(r'creativeId=(\d{12})', url)
+    #         if not match:
+    #             continue
+    #         
+    #         request_creative_id = match.group(1)
+    #         
+    #         # Only process requests with the real creative ID
+    #         if request_creative_id == real_creative_id:
+    #             content_file_index += 1
+    #             
+    #             # Save debug file if content debug mode enabled
+    #             if debug_content:
+    #                 save_content_debug_file(
+    #                     request_creative_id,
+    #                     text,
+    #                     url,
+    #                     content_file_index
+    #                 )
+    #             
+    #             # Extract videos from this request
+    #             videos = extract_youtube_videos_from_text(text)
+    #             
+    #             if videos:
+    #                 videos_by_request.append({
+    #                     'url': url[:100] + '...',
+    #                     'videos': list(set(videos))
+    #                 })
+    #                 all_videos.extend(videos)
+    #                 print(f"  Found {len(set(videos))} video(s) in request")
+    #         
+    #             # Extract App Store ID from real creative only
+    #         if not app_store_id:
+    #                 result = extract_app_store_id_from_text(text)
+    #                 if result:
+    #                     app_store_id, pattern_description = result
+    #                     if debug_appstore:
+    #                         save_appstore_debug_file(
+    #                             app_store_id, 
+    #                             text, 
+    #                             'creative-id', 
+    #                             url, 
+    #                             request_creative_id,
+    #                             pattern_description
+    #                         )
+    #     
+    #     # Deduplicate videos
+    #     unique_videos = list(set(all_videos))
+    #     
+    #     print(f"\n✅ Total unique videos extracted: {len(unique_videos)}")
+    #     for vid in unique_videos:
+    #         print(f"   • {vid}")
     
     # NO METHOD AVAILABLE
     else:
@@ -1615,13 +1621,8 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
                 execution_errors.append(error_msg)
             print(f"❌ {error_msg}")
     
-    # Check 2: Did we identify a real creative ID OR detect static content OR detect empty API?
-    if empty_api_info:
-        # Empty API detected - this is a failure case (no data available)
-        execution_success = False
-        execution_errors.append(f"FAILED: No API data - {empty_api_info['reason']}")
-        print(f"❌ No API data detected")
-    elif static_content_info:
+    # Check 2: Did we identify a real creative ID OR detect static content?
+    if static_content_info:
         # Static content detected - this is a success case
         content_type = static_content_info.get('content_type', 'unknown')
         content_desc = 'image' if content_type == 'image' else 'HTML text' if content_type == 'html' else 'cached'
@@ -1629,15 +1630,26 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         execution_warnings.append(f"INFO: Static {content_desc} ad with no video/app content (creative ID: {static_content_info['creative_id']})")
     elif not real_creative_id and not found_fletch_renders:
         execution_success = False
-        execution_errors.append("FAILED: Could not identify real creative ID (API method failed - GetCreativeById and SearchCreatives returned no valid data)")
-        print(f"❌ Could not identify real creative ID")
+        execution_errors.append("FAILED: Creative not found in API")
+        print(f"❌ Creative not found in API")
     elif real_creative_id or found_fletch_renders:
         print(f"✅ Creative identification successful")
     
     # Check 3: API responses received?
     if len(tracker.api_responses) == 0:
-        execution_warnings.append("WARNING: No API responses captured (may affect reliability)")
+        execution_warnings.append("WARNING: No API responses captured")
         print(f"⚠️  No API responses captured")
+        
+        # Diagnostic: Show what XHR/fetch requests were made
+        if len(all_xhr_fetch_requests) > 0:
+            print(f"   ℹ️  However, {len(all_xhr_fetch_requests)} XHR/fetch requests were detected:")
+            for idx, req in enumerate(all_xhr_fetch_requests[:5], 1):  # Show first 5
+                url_short = req['url'][:80] + '...' if len(req['url']) > 80 else req['url']
+                print(f"      {idx}. [{req['status']}] {url_short}")
+            if len(all_xhr_fetch_requests) > 5:
+                print(f"      ... and {len(all_xhr_fetch_requests) - 5} more")
+        else:
+            print(f"   ℹ️  No XHR/fetch requests detected at all (JavaScript may not have executed)")
     else:
         print(f"✅ API responses captured ({len(tracker.api_responses)})")
     
@@ -1677,10 +1689,6 @@ async def scrape_ads_transparency_page(page_url, use_proxy=False, external_proxy
         'success': execution_success,
         'errors': execution_errors,
         'warnings': execution_warnings,
-        
-        # Empty API Detection
-        'is_empty_api': bool(empty_api_info),
-        'empty_api_info': empty_api_info,
         
         # Static Content Detection
         'is_static_content': bool(static_content_info),
@@ -1777,13 +1785,7 @@ def print_results(result):
     
     print(f"\n{'EXTRACTION METHOD':-^80}")
     extraction_method = result.get('extraction_method', 'unknown')
-    if extraction_method == 'no-api-data':
-        print(f"Method: ❌ No API Data Detected")
-        if result.get('empty_api_info'):
-            info = result['empty_api_info']
-            print(f"  Creative ID: {info.get('creative_id', 'N/A')}")
-            print(f"  Reason: {info.get('reason', 'N/A')}")
-    elif result.get('is_static_content'):
+    if result.get('is_static_content'):
         print(f"Method: 🖼️  Static/Cached Content Detected")
         if result.get('static_content_info'):
             info = result['static_content_info']
@@ -1801,7 +1803,7 @@ def print_results(result):
         print(f"  Expected: {result.get('expected_fletch_renders', 0)} content.js")
         print(f"  Found: {result.get('found_fletch_renders', 0)} content.js")
     elif extraction_method == 'creative-id':
-        print(f"Method: 🔢 Creative ID matching (fallback)")
+        print(f"Method: 🔢 Creative ID matching (fallback) - COMMENTED OUT")
     else:
         print(f"Method: ❌ None available")
     
@@ -1858,8 +1860,6 @@ Examples:
     parser.add_argument('--json', metavar='FILE', help='Output results to JSON file')
     
     # External proxy arguments (IPRoyal, etc.)
-    parser.add_argument('--use-default-proxy', action='store_true',
-                        help='Use default IPRoyal proxy configuration (us9.4g.iproyal.com:7606)')
     parser.add_argument('--proxy-server', help='External proxy server (e.g., us10.4g.iproyal.com:8022)')
     parser.add_argument('--proxy-username', help='Proxy username')
     parser.add_argument('--proxy-password', help='Proxy password')
@@ -1872,26 +1872,11 @@ Examples:
     parser.add_argument('--debug-content', action='store_true',
                         help='Save ALL content.js files + API responses (GetCreativeById, SearchCreatives) to debug/ folder')
     
-    # Blocking control
-    parser.add_argument('--noblock', action='store_true',
-                        help='Disable URL blocking patterns (loads all resources including images, fonts, CSS)')
-    
     args = parser.parse_args()
     
     # Build external proxy config if provided
     external_proxy = None
-    proxy_display_name = None
-    
-    if args.use_default_proxy:
-        # Use default IPRoyal proxy configuration
-        external_proxy = {
-            'server': f"http://{DEFAULT_PROXY_CONFIG['server']}:{DEFAULT_PROXY_CONFIG['https_port']}",
-            'username': DEFAULT_PROXY_CONFIG['username'],
-            'password': DEFAULT_PROXY_CONFIG['password']
-        }
-        proxy_display_name = f"{DEFAULT_PROXY_CONFIG['server']}:{DEFAULT_PROXY_CONFIG['https_port']}"
-    elif args.proxy_server:
-        # Use custom proxy configuration
+    if args.proxy_server:
         if not args.proxy_username or not args.proxy_password:
             print("❌ Error: --proxy-username and --proxy-password required when using --proxy-server")
             sys.exit(1)
@@ -1901,14 +1886,13 @@ Examples:
             'username': args.proxy_username,
             'password': args.proxy_password
         }
-        proxy_display_name = args.proxy_server
     
     print("="*80)
     print("GOOGLE ADS TRANSPARENCY CENTER SCRAPER")
     print("="*80)
     print(f"\nURL: {args.url}")
     if external_proxy:
-        print(f"Mode: External Proxy ({proxy_display_name})")
+        print(f"Mode: External Proxy ({args.proxy_server})")
     elif args.proxy:
         print("Mode: Mitmproxy (accurate traffic measurement)")
     else:
@@ -1921,9 +1905,6 @@ Examples:
     if args.debug_content:
         print("Debug Mode: ON (ALL content.js + API responses will be saved to debug/ folder)")
     
-    if args.noblock:
-        print("⚠️  Blocking: DISABLED (all resources will be loaded, including images/fonts/CSS)")
-    
     print("\nStarting scraper...\n")
     
     try:
@@ -1933,8 +1914,7 @@ Examples:
             external_proxy=external_proxy,
             debug_appstore=args.debug_extra_information,
             debug_fletch=args.debug_fletch,
-            debug_content=args.debug_content,
-            use_blocking=not args.noblock
+            debug_content=args.debug_content
         )
         
         print_results(result)

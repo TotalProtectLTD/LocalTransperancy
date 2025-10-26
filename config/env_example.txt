@@ -1,0 +1,17 @@
+# BigQuery Import Configuration
+# Copy this file to .env and update the values as needed
+
+# Google Cloud Configuration
+GOOGLE_APPLICATION_CREDENTIALS="/Users/rostoni/Downloads/CursorTransperancy/backend/bigquery-credentials.json"
+BIGQUERY_PROJECT_ID="youtubeilike"
+
+# Google Cloud Storage Configuration
+BUCKET_NAME="youtubeilike-temp-exports"
+DEFAULT_FILE_NAME="October"
+
+# PostgreSQL Configuration (already configured in main project)
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME="local_transparency"
+DB_USER="transparency_user"
+DB_PASSWORD="transparency_pass_2025"
