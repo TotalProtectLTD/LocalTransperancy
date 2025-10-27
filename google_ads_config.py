@@ -40,7 +40,10 @@ BLOCKED_URL_PATTERNS = [
     'apis.google.com/',
     '/adframe',
     'googletagmanager.com/gtag/js?',
-    'logging?authuser='
+    'logging?authuser=',
+    "images/flags/",
+    "googleapis.com/css?",
+    "SearchService/SearchCreatives?authuser"
 ]
 
 # Specific gstatic.com paths to block (selective blocking like stress test)
@@ -48,7 +51,9 @@ GSTATIC_BLOCKED_PATTERNS = [
     '/images/',      # Block images from gstatic
     '/clarity/',     # Block clarity analytics
     '/_/js/k=og.qtm',  # Block optional JS
-    '/_/ss/k=og.qtm'   # Block CSS
+    '/_/ss/k=og.qtm' ,
+       "prod/api/main.min.js",
+    "prod/service/lazy.min.js"  # Block CSS
 ]
 
 # Timeout and interval settings (in seconds unless specified)
