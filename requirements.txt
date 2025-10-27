@@ -4,6 +4,7 @@
 # Core Dependencies
 playwright>=1.40.0
 httpx>=0.25.0
+httpcore>=1.0.0  # Required for httpx async support
 
 # Database
 psycopg2-binary>=2.9.0  # PostgreSQL adapter for Python (binary package, no compilation needed)

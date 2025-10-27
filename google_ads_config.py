@@ -76,7 +76,11 @@ BLOCKED_RESOURCE_TYPES = ['image', 'font', 'stylesheet']  # resource types to bl
 # File paths for proxy and temporary files
 MITM_ADDON_PATH = '/tmp/mitm_addon.py'  # path for mitmproxy addon script
 PROXY_RESULTS_PATH = '/tmp/proxy_results.json'  # path for proxy traffic results
-MITMDUMP_SEARCH_PATHS = ['mitmdump', '/usr/local/bin/mitmdump']  # paths to search for mitmdump executable
+MITMDUMP_SEARCH_PATHS = [
+    'mitmdump',
+    '/usr/local/bin/mitmdump',
+    '/Users/rostoni/Library/Python/3.9/bin/mitmdump'
+]  # paths to search for mitmdump executable
 
 # Regex patterns for data extraction
 # Creative ID patterns
@@ -160,8 +164,8 @@ class TrafficCounter:
     def request(self, flow):
         """Called for each request."""
         request_size = len(flow.request.raw_content) if flow.request.raw_content else 0
-        request_size += sum(len(f"{{k}}: {{v}}\r\n".encode()) for k, v in flow.request.headers.items())
-        request_size += len(f"{{flow.request.method}} {{flow.request.path}} HTTP/1.1\r\n".encode())
+        request_size += sum(len(f"{{{{k}}}}: {{{{v}}}}\\r\\n".encode()) for k, v in flow.request.headers.items())
+        request_size += len(f"{{{{flow.request.method}}}} {{{{flow.request.path}}}} HTTP/1.1\\r\\n".encode())
         
         self.total_request_bytes += request_size
         self.request_count += 1
@@ -176,7 +180,7 @@ class TrafficCounter:
         else:
             body_size = 0
         
-        headers_size = sum(len(f"{{k}}: {{v}}\r\n".encode()) for k, v in flow.response.headers.items())
+        headers_size = sum(len(f"{{{{k}}}}: {{{{v}}}}\\r\\n".encode()) for k, v in flow.response.headers.items())
         response_size = body_size + headers_size
         
         self.total_response_bytes += response_size

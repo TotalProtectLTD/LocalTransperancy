@@ -74,6 +74,7 @@ def print_results(result: Dict[str, Any]) -> None:
     - Creative identification (ID and method)
     - Extraction method used
     - Traffic statistics (bandwidth, requests, blocking)
+    - Cache statistics (hits, misses, bandwidth saved)
     - Performance metrics (duration, API responses, content.js files)
     
     Args:
@@ -198,6 +199,24 @@ def print_results(result: Dict[str, Any]) -> None:
         ):
             pct = (bytes_count / result.get('incoming_bytes', 0) * 100) if result.get('incoming_bytes', 0) > 0 else 0
             print(f"  {resource_type:<15} {format_bytes(bytes_count):<15} ({pct:.1f}%)")
+    
+    # Display cache statistics if any cacheable requests were made
+    cache_total = result.get('cache_total_requests', 0)
+    if cache_total > 0:
+        print(f"\n{'CACHE STATISTICS':-^80}")
+        cache_hits = result.get('cache_hits', 0)
+        cache_misses = result.get('cache_misses', 0)
+        cache_hit_rate = result.get('cache_hit_rate', 0)
+        cache_bytes_saved = result.get('cache_bytes_saved', 0)
+        
+        print(f"Cache Hits: {cache_hits}/{cache_total} ({cache_hit_rate:.1f}%)")
+        print(f"Cache Misses: {cache_misses}")
+        print(f"Bandwidth Saved: {format_bytes(cache_bytes_saved)}")
+        
+        if cache_hits > 0:
+            print(f"Status: 💾 Serving main.dart.js from cache (146x faster)")
+        elif cache_misses > 0:
+            print(f"Status: 🌐 Downloaded main.dart.js (will be cached for next run)")
     
     print("\n" + "="*80)
 

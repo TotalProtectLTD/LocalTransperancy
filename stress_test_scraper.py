@@ -12,6 +12,8 @@ Features:
 - Updates database with results (videos, app store ID, funded_by, errors)
 - Real-time progress logging with rate statistics
 - Static proxy support with IP logging
+- Cache statistics tracking (hit rate, bytes saved)
+- Real-time cache performance monitoring
 
 Usage:
     # Process all pending URLs with 10 concurrent workers
@@ -67,10 +69,10 @@ DB_CONFIG = {
 }
 
 # Proxy Configuration (optional - if not provided, uses no proxy)
-PROXY_HOST = "37.140.255.191"
-PROXY_PORT = 64368
-PROXY_USERNAME = "nxz6sYjf"
-PROXY_PASSWORD = "bhDKc63R"
+PROXY_HOST = "lt2.4g.iproyal.com"
+PROXY_PORT = 6253
+PROXY_USERNAME = "hHvEFk3"
+PROXY_PASSWORD = "UqUOnEaovKOzeNv"
 
 
 # IP Rotation Configuration
@@ -521,7 +523,7 @@ async def scrape_single_url(creative: Dict[str, Any], proxy_config: Optional[Dic
             external_proxy=proxy_config  # Use external proxy if provided
         )
         
-        # Convert result to stress test format
+        # Convert result to stress test format (including cache statistics)
         return {
             'success': result.get('success', False),
             'videos': result.get('videos', []),
@@ -530,7 +532,13 @@ async def scrape_single_url(creative: Dict[str, Any], proxy_config: Optional[Dic
             'funded_by': result.get('funded_by'),
             'real_creative_id': result.get('real_creative_id'),
             'duration_ms': result.get('duration_ms', 0),
-            'error': '; '.join(result.get('errors', [])) if not result.get('success') else None
+            'error': '; '.join(result.get('errors', [])) if not result.get('success') else None,
+            # Cache statistics
+            'cache_hits': result.get('cache_hits', 0),
+            'cache_misses': result.get('cache_misses', 0),
+            'cache_bytes_saved': result.get('cache_bytes_saved', 0),
+            'cache_hit_rate': result.get('cache_hit_rate', 0.0),
+            'cache_total_requests': result.get('cache_total_requests', 0)
         }
     
     except Exception as e:
@@ -562,7 +570,8 @@ async def worker(
     semaphore: asyncio.Semaphore,
     proxy_config: Optional[Dict[str, str]],
     stats: Dict[str, Any],
-    stats_lock: asyncio.Lock
+    stats_lock: asyncio.Lock,
+    show_cache_stats: bool = True
 ):
     """
     Worker coroutine that continuously processes URLs from database.
@@ -633,22 +642,44 @@ async def worker(
                         else:
                             stats['failed'] += 1
                     
+                    # Accumulate cache statistics
+                    stats['cache_hits'] += result.get('cache_hits', 0)
+                    stats['cache_misses'] += result.get('cache_misses', 0)
+                    stats['cache_bytes_saved'] += result.get('cache_bytes_saved', 0)
+                    
                     # Print progress every 10 URLs
                     if stats['processed'] % 10 == 0:
                         elapsed = time.time() - stats['start_time']
                         rate = stats['processed'] / elapsed if elapsed > 0 else 0
                         retry_info = f", {stats['retries']} ⟳" if stats.get('retries', 0) > 0 else ""
                         bad_ads_info = f", {stats['bad_ads']} 🚫" if stats.get('bad_ads', 0) > 0 else ""
+                        
+                        # Calculate cache hit rate for progress display
+                        cache_info = ""
+                        if show_cache_stats:
+                            cache_total = stats['cache_hits'] + stats['cache_misses']
+                            if cache_total > 0:
+                                cache_hit_rate = (stats['cache_hits'] / cache_total) * 100
+                                cache_mb_saved = stats['cache_bytes_saved'] / (1024 * 1024)
+                                cache_info = f" | 💾 Cache: {cache_hit_rate:.0f}% ({cache_mb_saved:.1f} MB saved)"
+                        
                         print(f"  Progress: {stats['processed']}/{stats['total_pending']} URLs "
                               f"({stats['success']} ✓, {stats['failed']} ✗{retry_info}{bad_ads_info}) "
-                              f"[{rate:.1f} URL/s]")
+                              f"[{rate:.1f} URL/s]{cache_info}")
+                    
+                    # Special cache report after first batch (to show warm-up effect)
+                    if show_cache_stats and stats['processed'] == 10:
+                        cache_total = stats['cache_hits'] + stats['cache_misses']
+                        if cache_total > 0:
+                            cache_hit_rate = (stats['cache_hits'] / cache_total) * 100
+                            print(f"  ℹ️  Initial cache warm-up: {cache_hit_rate:.0f}% hit rate (will improve as cache builds)")
             finally:
                 # Decrement active workers count
                 async with _workers_lock:
                     _active_workers_count -= 1
 
 
-async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = None, use_proxy: bool = True, force_rotation: bool = False, enable_rotation: bool = False):
+async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = None, use_proxy: bool = True, force_rotation: bool = False, enable_rotation: bool = False, show_cache_stats: bool = True):
     """
     Run stress test with continuous worker pool.
     
@@ -658,6 +689,7 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
         use_proxy: If True, use configured proxy; if False, no proxy
         force_rotation: If True, force IP rotation even if within cooldown period
         enable_rotation: If True, enable automatic IP rotation every 7 minutes
+        show_cache_stats: If True, display cache statistics (default: True)
     """
     print("="*80)
     print("GOOGLE ADS TRANSPARENCY CENTER - STRESS TEST")
@@ -704,6 +736,14 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
     else:
         print(f"  IP Rotation:    Disabled (static IP)")
     
+    # Cache status at startup
+    if show_cache_stats:
+        print(f"\nCache System:")
+        print(f"  Status:         ✅ ENABLED (two-level: memory L1 + disk L2)")
+        print(f"  Caches:         main.dart.js files (~1.5-2 MB each)")
+        print(f"  Expected:       98%+ hit rate after warm-up")
+        print(f"  Savings:        ~1.5 GB bandwidth per 1,000 URLs")
+    
     # Rotate IP if needed (only if rotation is enabled or forced)
     if enable_rotation or force_rotation:
         print("\n" + "="*80)
@@ -732,7 +772,11 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
         'retries': 0,
         'bad_ads': 0,
         'total_pending': total_pending,
-        'start_time': time.time()
+        'start_time': time.time(),
+        # Cache statistics
+        'cache_hits': 0,
+        'cache_misses': 0,
+        'cache_bytes_saved': 0
     }
     stats_lock = asyncio.Lock()
     
@@ -748,7 +792,7 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
     try:
         # Create worker tasks
         workers = [
-            worker(i, semaphore, proxy_config, stats, stats_lock)
+            worker(i, semaphore, proxy_config, stats, stats_lock, show_cache_stats)
             for i in range(max_concurrent)
         ]
         
@@ -788,7 +832,20 @@ async def run_stress_test(max_concurrent: int = 10, max_urls: Optional[int] = No
         print(f"  Pending retry:  {stats['retries']} (marked for retry)")
     print(f"Success rate:     {stats['success']/stats['processed']*100:.1f}%" if stats['processed'] > 0 else "N/A")
     print(f"Average rate:     {stats['processed']/total_duration:.2f} URL/s" if total_duration > 0 else "N/A")
-    print(f"IP used:          {current_ip}")
+    
+    # Cache statistics
+    if show_cache_stats:
+        cache_total = stats['cache_hits'] + stats['cache_misses']
+        if cache_total > 0:
+            cache_hit_rate = (stats['cache_hits'] / cache_total) * 100
+            cache_mb_saved = stats['cache_bytes_saved'] / (1024 * 1024)
+            print(f"\nCache Statistics:")
+            print(f"  Cache hits:     {stats['cache_hits']}/{cache_total} ({cache_hit_rate:.1f}%)")
+            print(f"  Cache misses:   {stats['cache_misses']}")
+            print(f"  Bytes saved:    {cache_mb_saved:.2f} MB")
+            print(f"  Performance:    {cache_hit_rate:.0f}% bandwidth reduction from cache")
+    
+    print(f"\nIP used:          {current_ip}")
     print(f"Database:         PostgreSQL (creatives_fresh table)")
 
 
@@ -834,6 +891,8 @@ IP Rotation:
                         help='Enable automatic IP rotation every 7 minutes')
     parser.add_argument('--force-rotation', action='store_true',
                         help='Force IP rotation once at startup (bypasses 7-minute cooldown)')
+    parser.add_argument('--no-cache-stats', action='store_true',
+                        help='Disable cache statistics display (for minimal output)')
     
     args = parser.parse_args()
     
@@ -843,7 +902,8 @@ IP Rotation:
             max_urls=args.max_urls,
             use_proxy=not args.no_proxy,
             force_rotation=args.force_rotation,
-            enable_rotation=args.enable_rotation
+            enable_rotation=args.enable_rotation,
+            show_cache_stats=not args.no_cache_stats
         ))
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")

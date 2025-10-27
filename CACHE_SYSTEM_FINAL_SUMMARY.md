@@ -55,13 +55,6 @@ A complete, production-ready caching system with comprehensive documentation for
    - Best practices
    - **Read time:** 20 minutes
 
-5. **MAIN_SCRIPT_INTEGRATION.md** ⭐ **STEP-BY-STEP**
-   - Integration into google_ads_transparency_scraper.py
-   - 7 steps with code examples
-   - Complete working example
-   - Multi-threading guide
-   - **Read time:** 15 minutes
-
 ### Architecture & Design
 
 6. **REFACTORING_SUMMARY.md**
