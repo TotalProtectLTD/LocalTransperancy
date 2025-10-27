@@ -67,10 +67,11 @@ DB_CONFIG = {
 }
 
 # Proxy Configuration (optional - if not provided, uses no proxy)
-PROXY_HOST = "lt2.4g.iproyal.com"
-PROXY_PORT = 6217
-PROXY_USERNAME = "5WuSD1W"
-PROXY_PASSWORD = "sp9YURcDXb0Mjxx"
+PROXY_HOST = "37.140.255.191"
+PROXY_PORT = 64368
+PROXY_USERNAME = "nxz6sYjf"
+PROXY_PASSWORD = "bhDKc63R"
+
 
 # IP Rotation Configuration
 IPROYAL_ROTATE_URL = "https://apid.iproyal.com/v1/orders/59934727/rotate-ip/9vZGSTaLoF"
@@ -536,6 +537,11 @@ async def scrape_single_url(creative: Dict[str, Any], proxy_config: Optional[Dic
         duration = (time.time() - start_time) * 1000
         error_msg = f"{type(e).__name__}: {str(e)}"
         
+        # Log the error to console for visibility in concurrent environments
+        print(f"  ❌ EXCEPTION during scrape: {error_msg[:150]}")
+        import sys
+        sys.stdout.flush()
+        
         return {
             'success': False,
             'error': error_msg,
@@ -596,6 +602,16 @@ async def worker(
                 
                 # Scrape URL
                 result = await scrape_single_url(creative, proxy_config)
+                
+                # Log immediate result (for debugging concurrent issues)
+                if result['success']:
+                    videos = result.get('video_count', 0)
+                    print(f"  ✅ Scraped: {creative['creative_id'][:15]}... ({videos} videos)")
+                else:
+                    error_type = result.get('error', 'Unknown')[:80]
+                    print(f"  ⚠️  Failed: {creative['creative_id'][:15]}... - {error_type}")
+                import sys
+                sys.stdout.flush()
                 
                 # Update database
                 update_result(creative['id'], result)
