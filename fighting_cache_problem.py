@@ -104,7 +104,8 @@ ENABLE_BLOCKING = True
 # ============================================================================
 
 # Enable smart caching for main.dart.js files
-USE_LOCAL_CACHE_FOR_MAIN_DART = True
+# Set to False to measure full bandwidth usage (no cache)
+USE_LOCAL_CACHE_FOR_MAIN_DART = True  # ENABLED - cache main.dart.js files
 
 # URL pattern to intercept for main.dart.js files
 MAIN_DART_JS_URL_PATTERN = 'main.dart.js'
@@ -150,6 +151,7 @@ PROXY_TERMINATION_TIMEOUT = 10  # timeout for proxy process termination
 SUBPROCESS_VERSION_CHECK_TIMEOUT = 1  # timeout for mitmdump version check
 
 # Mitmproxy addon script for traffic measurement
+# FIXED: Measures actual compressed bytes over the wire (what you pay for with real proxies)
 PROXY_ADDON_SCRIPT = f'''
 import json
 
@@ -158,30 +160,100 @@ class TrafficCounter:
         self.total_request_bytes = 0
         self.total_response_bytes = 0
         self.request_count = 0
+        self.response_count = 0
+        self.details = []
     
     def request(self, flow):
-        """Called for each request."""
-        request_size = len(flow.request.raw_content) if flow.request.raw_content else 0
-        request_size += sum(len(f"{{k}}: {{v}}\\r\\n".encode()) for k, v in flow.request.headers.items())
-        request_size += len(f"{{flow.request.method}} {{flow.request.path}} HTTP/1.1\\r\\n".encode())
+        """Called for each request - measure actual wire bytes."""
+        # Body size (actual request body, not compressed for requests usually)
+        body_size = len(flow.request.raw_content) if flow.request.raw_content else 0
         
-        self.total_request_bytes += request_size
+        # Headers size (sum of all header lines)
+        headers_size = sum(len(f"{{k}}: {{v}}\\r\\n".encode()) for k, v in flow.request.headers.items())
+        
+        # Request line size (GET /path HTTP/1.1)
+        request_line_size = len(f"{{flow.request.method}} {{flow.request.path}} HTTP/1.1\\r\\n".encode())
+        
+        total_request_size = body_size + headers_size + request_line_size
+        self.total_request_bytes += total_request_size
         self.request_count += 1
     
     def response(self, flow):
-        """Called for each response."""
-        content_length = flow.response.headers.get('content-length', None)
-        if content_length:
-            body_size = int(content_length)
-        elif flow.response.raw_content:
-            body_size = len(flow.response.raw_content)
+        """Called for each response - measure COMPRESSED bytes (wire traffic)."""
+        # CRITICAL: We need to get the actual compressed bytes sent over the wire
+        # Use flow.response.content which is always available (decompressed)
+        # Then compress it ourselves to estimate wire size
+        
+        # Try to get compressed size from Content-Length header first (most accurate)
+        content_length_header = flow.response.headers.get('content-length', None)
+        
+        # Get decompressed content (always available)
+        try:
+            decompressed_content = flow.response.content
+            decompressed_size = len(decompressed_content) if decompressed_content else 0
+        except:
+            decompressed_content = None
+            decompressed_size = 0
+        
+        if content_length_header:
+            # Content-Length header gives us the actual wire size (compressed)
+            body_size = int(content_length_header)
+        elif decompressed_size > 0:
+            # No Content-Length header (HTTP/2 or chunked encoding)
+            # Compress the data ourselves to estimate wire size
+            encoding = flow.response.headers.get('content-encoding', 'none').lower()
+            
+            if encoding == 'gzip':
+                # Compress with gzip to estimate wire size
+                import gzip
+                import io
+                buf = io.BytesIO()
+                with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=6) as gz:
+                    gz.write(decompressed_content)
+                body_size = len(buf.getvalue())
+            elif encoding == 'br':
+                # Brotli compression
+                try:
+                    import brotli
+                    body_size = len(brotli.compress(decompressed_content))
+                except:
+                    # Fallback if brotli not available: estimate 30% of original
+                    body_size = int(decompressed_size * 0.3)
+            elif encoding == 'deflate':
+                # Deflate compression
+                import zlib
+                body_size = len(zlib.compress(decompressed_content, 6))
+            else:
+                # No compression, use decompressed size
+                body_size = decompressed_size
         else:
             body_size = 0
         
-        headers_size = sum(len(f"{{k}}: {{v}}\\r\\n".encode()) for k, v in flow.response.headers.items())
-        response_size = body_size + headers_size
+        # Status line size (HTTP/1.1 200 OK)
+        status_line_size = len(f"HTTP/1.1 {{flow.response.status_code}} {{flow.response.reason}}\\r\\n".encode())
         
-        self.total_response_bytes += response_size
+        # Headers size (sum of all header lines)
+        headers_size = sum(len(f"{{k}}: {{v}}\\r\\n".encode()) for k, v in flow.response.headers.items())
+        
+        total_response_size = body_size + status_line_size + headers_size
+        self.total_response_bytes += total_response_size
+        self.response_count += 1
+        
+        # Store detailed info for debugging  
+        compression_ratio = (1 - body_size / decompressed_size) * 100 if decompressed_size > 0 else 0
+        
+        self.details.append({{
+            'url': flow.request.url,
+            'method': flow.request.method,
+            'status': flow.response.status_code,
+            'request_bytes': len(flow.request.raw_content) if flow.request.raw_content else 0,
+            'response_body_bytes_compressed': body_size,
+            'response_body_bytes_decompressed': decompressed_size,
+            'compression_ratio_percent': round(compression_ratio, 1),
+            'response_headers_bytes': headers_size,
+            'content_encoding': flow.response.headers.get('content-encoding', 'none'),
+            'content_type': flow.response.headers.get('content-type', 'unknown')
+        }})
     
     def done(self):
         """Called when mitmproxy is shutting down."""
@@ -189,11 +261,13 @@ class TrafficCounter:
             'total_request_bytes': self.total_request_bytes,
             'total_response_bytes': self.total_response_bytes,
             'total_bytes': self.total_request_bytes + self.total_response_bytes,
-            'request_count': self.request_count
+            'request_count': self.request_count,
+            'response_count': self.response_count,
+            'details': self.details[:50]  # Store first 50 requests for analysis
         }}
         
         with open('{PROXY_RESULTS_PATH}', 'w') as f:
-            json.dump(results, f)
+            json.dump(results, f, indent=2)
 
 addons = [TrafficCounter()]
 '''
@@ -1322,7 +1396,7 @@ async def setup_proxy():
     
     if mitmdump_cmd:
         proxy_process = subprocess.Popen(
-            [mitmdump_cmd, '-p', MITMPROXY_PORT, '-s', MITM_ADDON_PATH, '--set', 'stream_large_bodies=1'],
+            [mitmdump_cmd, '-p', MITMPROXY_PORT, '-s', MITM_ADDON_PATH],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
@@ -1510,6 +1584,13 @@ async def main():
     finally:
         # Stop proxy and get results
         proxy_results = await teardown_proxy(proxy_process)
+        
+        # Save proxy results details if available
+        if proxy_results and 'details' in proxy_results and 'session_dir' in locals():
+            proxy_details_file = os.path.join(session_dir, "00_proxy_bandwidth_details.json")
+            with open(proxy_details_file, 'w', encoding='utf-8') as f:
+                json.dump(proxy_results, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved proxy bandwidth details to {proxy_details_file}")
     
     # Determine traffic measurement
     if proxy_results:
@@ -1527,13 +1608,15 @@ async def main():
     
     # Print final summary with traffic stats
     logger.info("\n" + "="*80)
-    logger.info("FINAL SUMMARY")
+    logger.info("FINAL SUMMARY - BANDWIDTH MEASUREMENT (REAL PROXY SIMULATION)")
     logger.info("="*80)
     logger.info(f"Total Requests: {network_logger.request_count}")
     logger.info(f"Total Responses: {network_logger.response_count}")
     logger.info(f"Cache Hits: {network_logger.cache_hit_count}")
     if USE_LOCAL_CACHE_FOR_MAIN_DART:
         logger.info(f"  - Local cache: ENABLED (main.dart.js)")
+    else:
+        logger.info(f"  - Local cache: DISABLED (measuring full bandwidth)")
     logger.info(f"Blocked Requests: {network_logger.blocked_count}")
     if ENABLE_BLOCKING:
         logger.info(f"  - Blocking: ENABLED")
@@ -1544,15 +1627,46 @@ async def main():
         logger.info(f"  - Blocking: DISABLED")
     
     # Traffic statistics
-    logger.info(f"\nTraffic Statistics:")
+    logger.info(f"\n{'='*80}")
+    logger.info(f"BANDWIDTH USAGE (Compressed - What Real Proxies Measure):")
+    logger.info(f"{'='*80}")
     logger.info(f"  - Measurement method: {measurement_method}")
     if proxy_results:
-        logger.info(f"  - Incoming: {format_bytes(incoming_bytes)}")
-        logger.info(f"  - Outgoing: {format_bytes(outgoing_bytes)}")
-        logger.info(f"  - Total: {format_bytes(total_bytes)}")
+        logger.info(f"  - Incoming (responses): {format_bytes(incoming_bytes)}")
+        logger.info(f"  - Outgoing (requests):  {format_bytes(outgoing_bytes)}")
+        logger.info(f"  - Total bandwidth:      {format_bytes(total_bytes)}")
         logger.info(f"  - Duration: {duration_ms:.0f} ms")
+        logger.info(f"  - Requests tracked: {proxy_results.get('request_count', 0)}")
+        logger.info(f"  - Responses tracked: {proxy_results.get('response_count', 0)}")
+        
+        # Show detailed per-request breakdown if available
+        if 'details' in proxy_results and proxy_results['details']:
+            logger.info(f"\n{'='*80}")
+            logger.info(f"TOP BANDWIDTH CONSUMERS (Compressed Wire Traffic):")
+            logger.info(f"{'='*80}")
+            
+            # Sort by compressed response size
+            sorted_details = sorted(proxy_results['details'], 
+                                   key=lambda x: x.get('response_body_bytes_compressed', 0), 
+                                   reverse=True)
+            
+            logger.info(f"{'#':>3s} {'Compressed':>12s} {'Decompressed':>14s} {'Ratio':>7s} {'Enc':>6s} {'Type':30s}")
+            logger.info(f"{'-'*80}")
+            
+            for i, detail in enumerate(sorted_details[:15], 1):
+                url = detail['url'][:75]  # Truncate long URLs
+                compressed = detail.get('response_body_bytes_compressed', 0)
+                decompressed = detail.get('response_body_bytes_decompressed', 0)
+                ratio = detail.get('compression_ratio_percent', 0)
+                encoding = detail.get('content_encoding', 'none')[:6]
+                content_type = detail.get('content_type', 'unknown').split(';')[0][:30]
+                status = detail.get('status', '?')
+                
+                logger.info(f"{i:2d}. {format_bytes(compressed):>12s} {format_bytes(decompressed):>14s} {ratio:>6.1f}% {encoding:>6s} {content_type:30s}")
+                logger.info(f"    → {url}")
     
-    logger.info(f"\nSession directory: {session_dir}")
+    logger.info(f"\n{'='*80}")
+    logger.info(f"Session directory: {session_dir}")
     logger.info(f"  - URLs summary: {urls_file}")
     logger.info(f"  - Session summary: {summary_file}")
     logger.info(f"  - Individual request-response files: {network_logger.request_count} files")

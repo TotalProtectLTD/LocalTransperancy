@@ -69,10 +69,10 @@ DB_CONFIG = {
 }
 
 # Proxy Configuration (optional - if not provided, uses no proxy)
-PROXY_HOST = "lt2.4g.iproyal.com"
-PROXY_PORT = 6253
-PROXY_USERNAME = "hHvEFk3"
-PROXY_PASSWORD = "UqUOnEaovKOzeNv"
+PROXY_HOST = "hub-us-7.litport.net"
+PROXY_PORT = 1337
+PROXY_USERNAME = "KokrmD6W"
+PROXY_PASSWORD = "qH6ggXsFnX"
 
 
 # IP Rotation Configuration

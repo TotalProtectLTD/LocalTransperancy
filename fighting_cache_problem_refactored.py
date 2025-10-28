@@ -47,15 +47,64 @@ class NetworkLogger:
         self.blocked_count = 0
         self.cache_hit_count = 0
         
+        # Create log files
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        self.request_log = os.path.join(output_dir, f'requests_{timestamp}.log')
+        self.response_log = os.path.join(output_dir, f'responses_{timestamp}.log')
+        self.summary_log = os.path.join(output_dir, f'summary_{timestamp}.log')
+        
+        # Initialize files
+        with open(self.request_log, 'w') as f:
+            f.write("REQUEST LOG\n" + "="*80 + "\n\n")
+        with open(self.response_log, 'w') as f:
+            f.write("RESPONSE LOG\n" + "="*80 + "\n\n")
+        
     def log_request(self, request):
         """Log request."""
         self.request_count += 1
+        log_msg = f"[REQUEST #{self.request_count}] {request.method} {request.resource_type} - {request.url}"
         logger.info(f"[REQUEST #{self.request_count}] {request.method} {request.resource_type} - {request.url[:100]}")
+        
+        # Write to file
+        with open(self.request_log, 'a') as f:
+            f.write(f"{log_msg}\n")
     
     async def log_response(self, response):
         """Log response."""
         self.response_count += 1
+        log_msg = f"[RESPONSE #{self.response_count}] {response.status} - {response.url}"
         logger.info(f"[RESPONSE #{self.response_count}] {response.status} - {response.url[:100]}")
+        
+        # Write to file
+        with open(self.response_log, 'a') as f:
+            f.write(f"{log_msg}\n")
+    
+    def write_summary(self, proxy_results=None, duration_ms=0):
+        """Write summary to file."""
+        with open(self.summary_log, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write("FINAL SUMMARY\n")
+            f.write("="*80 + "\n")
+            f.write(f"Total Requests: {self.request_count}\n")
+            f.write(f"Total Responses: {self.response_count}\n")
+            f.write(f"Cache Hits: {self.cache_hit_count}\n")
+            f.write(f"Blocked Requests: {self.blocked_count}\n\n")
+            
+            if proxy_results:
+                f.write("Traffic Statistics:\n")
+                f.write(f"  - Measurement method: proxy (precise)\n")
+                f.write(f"  - Incoming: {format_bytes(proxy_results['total_response_bytes'])}\n")
+                f.write(f"  - Outgoing: {format_bytes(proxy_results['total_request_bytes'])}\n")
+                f.write(f"  - Total: {format_bytes(proxy_results['total_bytes'])}\n")
+                f.write(f"  - Duration: {duration_ms:.0f} ms\n\n")
+            
+            if MEMORY_CACHE:
+                memory_size = sum(cf.size for cf in MEMORY_CACHE.values())
+                f.write("Memory Cache:\n")
+                f.write(f"  - Files in memory: {len(MEMORY_CACHE)}\n")
+                f.write(f"  - Memory used: {format_bytes(memory_size)}\n")
+            
+            f.write("="*80 + "\n")
 
 
 def create_route_handler(network_logger):
@@ -269,6 +318,10 @@ async def main():
         logger.info(f"\nMemory Cache:")
         logger.info(f"  - Files in memory: {len(MEMORY_CACHE)}")
         logger.info(f"  - Memory used: {format_bytes(memory_size)}")
+    
+    # Write summary to file
+    network_logger.write_summary(proxy_results, duration_ms)
+    logger.info(f"\nLogs saved to: {TEMP_DIR}/")
     
     logger.info("="*80)
     logger.info("\nScript completed successfully!")
