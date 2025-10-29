@@ -27,10 +27,12 @@ Integration:
 """
 
 import time
+import asyncio
 from typing import Dict, Any, Callable, Awaitable, Optional
 
 # Import cache storage functions
 from cache_storage import load_from_cache, save_to_cache, format_bytes
+from cache_models import get_cache_filename
 
 # Import configuration
 from cache_config import (
@@ -51,6 +53,10 @@ _cache_stats = {
     'hit_times': [],
     'miss_times': []
 }
+
+# Download locks to prevent concurrent downloads of the same file
+_download_locks = {}
+_download_locks_lock = asyncio.Lock()
 
 
 def reset_cache_statistics() -> None:
@@ -171,62 +177,93 @@ def create_cache_aware_route_handler(
         # Check if caching is enabled and URL matches pattern
         if USE_LOCAL_CACHE_FOR_MAIN_DART and MAIN_DART_JS_URL_PATTERN in url:
             try:
-                # Try loading from cache (memory L1, then disk L2)
-                start_time = time.time()
-                content, metadata = load_from_cache(url)
+                # Get or create lock for this specific file
+                filename = get_cache_filename(url)
+                async with _download_locks_lock:
+                    if filename not in _download_locks:
+                        _download_locks[filename] = asyncio.Lock()
+                    file_lock = _download_locks[filename]
                 
-                if content:
-                    # ============================================================
-                    # CACHE HIT: Serve from cache
-                    # ============================================================
-                    elapsed = time.time() - start_time
-                    _cache_stats['hits'] += 1
-                    _cache_stats['bytes_saved'] += len(content.encode('utf-8'))
-                    _cache_stats['hit_times'].append(elapsed)
+                # Acquire lock to prevent concurrent downloads
+                async with file_lock:
+                    # Try loading from cache (memory L1, then disk L2)
+                    start_time = time.time()
+                    content, metadata = load_from_cache(url)
                     
-                    # Determine cache level (memory or disk)
-                    cache_level = metadata.get('cache_level', 'unknown')
+                    if content:
+                        # ============================================================
+                        # CACHE HIT: Serve from cache
+                        # ============================================================
+                        elapsed = time.time() - start_time
+                        _cache_stats['hits'] += 1
+                        _cache_stats['bytes_saved'] += len(content.encode('utf-8'))
+                        _cache_stats['hit_times'].append(elapsed)
+                        
+                        # Determine cache level (memory or disk)
+                        cache_level = metadata.get('cache_level', 'unknown')
+                        
+                        # DEBUG: Print cache hit information
+                        print(f"✅ CACHE HIT: {url[:80]}... ({format_bytes(len(content.encode('utf-8')))}, {cache_level} cache)")
+                        
+                        # Fulfill request from cache with appropriate headers
+                        await route.fulfill(
+                            status=200,
+                            headers={
+                                'content-type': 'application/javascript; charset=utf-8',
+                                'cache-control': 'public, max-age=86400',
+                                'x-cache': f'HIT-{cache_level.upper()}',  # Custom header for debugging
+                            },
+                            body=content
+                        )
+                        
+                        # Note: We don't call tracker methods here because cached
+                        # responses don't go through normal network flow
+                        return
                     
-                    # Fulfill request from cache with appropriate headers
-                    await route.fulfill(
-                        status=200,
-                        headers={
-                            'content-type': 'application/javascript; charset=utf-8',
-                            'cache-control': 'public, max-age=86400',
-                            'x-cache': f'HIT-{cache_level.upper()}',  # Custom header for debugging
-                        },
-                        body=content
-                    )
-                    
-                    # Note: We don't call tracker methods here because cached
-                    # responses don't go through normal network flow
-                    return
-                
-                else:
-                    # ============================================================
-                    # CACHE MISS: Fetch from network and save to cache
-                    # ============================================================
-                    miss_start_time = time.time()
-                    
-                    # Fetch from network using Playwright's route.fetch()
-                    response = await route.fetch()
-                    body = await response.text()
-                    
-                    miss_elapsed = time.time() - miss_start_time
-                    _cache_stats['misses'] += 1
-                    _cache_stats['miss_times'].append(miss_elapsed)
-                    
-                    # Save to cache if AUTO_CACHE_ON_MISS enabled
-                    if AUTO_CACHE_ON_MISS:
-                        await save_to_cache(url, body, dict(response.headers))
-                    
-                    # Fulfill request with fetched content
-                    await route.fulfill(
-                        status=response.status,
-                        headers=dict(response.headers),
-                        body=body
-                    )
-                    return
+                    else:
+                        # ============================================================
+                        # CACHE MISS: Fetch from network and save to cache
+                        # ============================================================
+                        miss_start_time = time.time()
+                        
+                        # DEBUG: Print cache miss information
+                        print(f"❌ CACHE MISS: {url[:80]}... (downloading from network)")
+                        
+                        # Check if this is a version change
+                        from cache_storage import check_version_changed
+                        version_changed, current_version, cached_version = check_version_changed(url)
+                        
+                        if version_changed and cached_version:
+                            # Enhanced logging for version changes
+                            print(f"\n🔄 main.dart.js VERSION UPDATE DETECTED")
+                            print(f"   Old version: {cached_version}")
+                            print(f"   New version: {current_version}")
+                            print(f"   Downloading new main.dart.js...")
+                            
+                        # Fetch from network using Playwright's route.fetch()
+                        response = await route.fetch()
+                        body = await response.text()
+                        
+                        miss_elapsed = time.time() - miss_start_time
+                        _cache_stats['misses'] += 1
+                        _cache_stats['miss_times'].append(miss_elapsed)
+                        
+                        # Log download completion
+                        if version_changed and cached_version:
+                            print(f"   ✅ Downloaded new main.dart.js ({len(body):,} bytes) in {miss_elapsed:.2f}s")
+                            print(f"   📦 Saved to cache (version {current_version})")
+                        
+                        # Save to cache if AUTO_CACHE_ON_MISS enabled
+                        if AUTO_CACHE_ON_MISS:
+                            await save_to_cache(url, body, dict(response.headers))
+                        
+                        # Fulfill request with fetched content
+                        await route.fulfill(
+                            status=response.status,
+                            headers=dict(response.headers),
+                            body=body
+                        )
+                        return
             
             except Exception as e:
                 # On cache error, fall through to original handler

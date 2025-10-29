@@ -1,0 +1,80 @@
+{
+  "execution_success": true,
+  "execution_errors": [],
+  "execution_warnings": [],
+  "success": true,
+  "errors": [],
+  "warnings": [],
+  "is_static_content": false,
+  "static_content_info": null,
+  "videos": [
+    "C_NGOLQCcBo",
+    "df0Aym2cJDM"
+  ],
+  "video_count": 2,
+  "videos_by_request": [
+    {
+      "url": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=1568608571&creativeId=777846122339&uiFeatures=12&versionId=6&assets=%3DH4sIAAAAAAAAAONS5OLkOH1t-8VLHALMQOaDFccvAJk8QOZOiCgjAOWA0BIjAAAA&allowedVariations=46&sig=ACiVB_xU5eVt3kUjgNmO-0FuUzS90KN3BQ&htmlParentId=fletch-render-13102069989470064879&responseCallback=fletchCallback13102069989470064879&nonce=YPUm956Vg5GTXSKkwiu8xw",
+      "url_short": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transpa...",
+      "videos": [
+        "df0Aym2cJDM"
+      ]
+    },
+    {
+      "url": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=1568608571&creativeId=777846122339&uiFeatures=12&versionId=6&assets=%3DH4sIAAAAAAAAAONS5OLkWPJ_0dpLHAI8QOb-a9svApnMQOZmCJMRAD5KfhAjAAAA&sig=ACiVB_z3c3TZ3tW0C-gAa9R1nHT5kqgUCw&htmlParentId=fletch-render-4717751692383493976&responseCallback=fletchCallback4717751692383493976&nonce=YPUm956Vg5GTXSKkwiu8xw",
+      "url_short": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transpa...",
+      "videos": [
+        "C_NGOLQCcBo"
+      ]
+    },
+    {
+      "url": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=1568608571&creativeId=777846122339&uiFeatures=12&versionId=2&assets=%3DH4sIAAAAAAAAAONS5OLkOHFt-8VLHALMQOaS_4vWApk8QOZmiCgjACE0tkcjAAAA&sig=ACiVB_x9ZxzKWOIcV0EhlUvNkD2ZXy-Jog&htmlParentId=fletch-render-14607024812494443149&responseCallback=fletchCallback14607024812494443149&nonce=YPUm956Vg5GTXSKkwiu8xw",
+      "url_short": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transpa...",
+      "videos": [
+        "C_NGOLQCcBo"
+      ]
+    },
+    {
+      "url": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=1568608571&creativeId=777846122339&uiFeatures=12&versionId=6&assets=%3DH4sIAAAAAAAAAONS5OLkOH1t-8VLHALMQOaDFccvAJk8QOZOiCgjAOWA0BIjAAAA&sig=ACiVB_xU5eVt3kUjgNmO-0FuUzS90KN3BQ&htmlParentId=fletch-render-11117170147515479165&responseCallback=fletchCallback11117170147515479165&nonce=YPUm956Vg5GTXSKkwiu8xw",
+      "url_short": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transpa...",
+      "videos": [
+        "df0Aym2cJDM"
+      ]
+    }
+  ],
+  "real_creative_id": "777846122339",
+  "method_used": "api",
+  "extraction_method": "fletch-render",
+  "expected_fletch_renders": 4,
+  "found_fletch_renders": 4,
+  "app_store_id": "6747917719",
+  "app_ids_from_base64": [],
+  "funded_by": "PATEL VIJAYBHAI GOVINDBHAI",
+  "incoming_bytes": 5172932,
+  "outgoing_bytes": 29003,
+  "total_bytes": 5201935,
+  "measurement_method": "estimation",
+  "request_count": 39,
+  "blocked_count": 29,
+  "url_blocked_count": 29,
+  "duration_ms": 7188.752174377441,
+  "incoming_by_type": {
+    "document": 1419,
+    "script": 5168971,
+    "xhr": 2542
+  },
+  "outgoing_by_type": {
+    "document": 4029,
+    "stylesheet": 1811,
+    "script": 7406,
+    "image": 9366,
+    "xhr": 6391
+  },
+  "content_js_requests": 4,
+  "api_responses": 2,
+  "cache_hits": 3,
+  "cache_misses": 0,
+  "cache_bytes_saved": 5165945,
+  "cache_hit_rate": 100.0,
+  "cache_total_requests": 3
+}

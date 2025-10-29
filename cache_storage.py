@@ -11,6 +11,7 @@ import logging
 
 from cache_config import CACHE_DIR, VERSION_TRACKING_FILE, MEMORY_CACHE_MAX_SIZE_MB
 from cache_models import CachedFile, get_cache_filename, extract_version_from_url
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 CACHE_LOCKS = {}
 CACHE_LOCKS_LOCK = threading.Lock()
 VERSION_TRACKING_LOCK = threading.Lock()
+
+# Version change log
+VERSION_CHANGE_LOG_FILE = os.path.join(CACHE_DIR, 'version_changes.log')
 
 # In-memory cache
 MEMORY_CACHE = {}
@@ -95,6 +99,31 @@ def get_version_tracking_path():
     return os.path.join(CACHE_DIR, VERSION_TRACKING_FILE)
 
 
+def log_version_change(old_version, new_version, old_url, new_url, old_size, new_size):
+    """Log version change to file in the cache directory."""
+    try:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        log_entry = f"[{timestamp}] VERSION UPDATE\n"
+        log_entry += f"  Old version: {old_version}\n"
+        log_entry += f"  New version: {new_version}\n"
+        log_entry += f"  Old URL: {old_url}\n"
+        log_entry += f"  New URL: {new_url}\n"
+        log_entry += f"  Size change: {format_bytes(old_size)} → {format_bytes(new_size)} "
+        log_entry += f"({new_size - old_size:+,} bytes)\n"
+        log_entry += "-" * 80 + "\n\n"
+        
+        # Append to log file (thread-safe)
+        with open(VERSION_CHANGE_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+            f.flush()
+            
+        logger.info(f"[VERSION LOG] Written to {VERSION_CHANGE_LOG_FILE}")
+        
+    except Exception as e:
+        logger.error(f"[VERSION LOG ERROR] Failed to write log: {e}")
+
+
 def load_version_tracking():
     """Load version tracking data from disk (thread-safe)."""
     with VERSION_TRACKING_LOCK:
@@ -145,7 +174,13 @@ def check_version_changed(url):
     cached_version = tracking_data[filename].get('version')
     
     if cached_version != current_version:
+        # Enhanced version change logging
+        cached_url = tracking_data[filename].get('url', 'N/A')
         logger.warning(f"[VERSION CHANGE] {filename}: {cached_version} -> {current_version}")
+        logger.warning(f"   Cached version: {cached_version}")
+        logger.warning(f"   Current version: {current_version}")
+        logger.warning(f"   Cached URL: {cached_url}")
+        logger.warning(f"   Current URL: {url}")
         return True, current_version, cached_version
     
     return False, current_version, cached_version
@@ -176,6 +211,18 @@ async def save_to_cache(url, content, headers=None):
     filename = get_cache_filename(url)
     cache_path = os.path.join(CACHE_DIR, filename)
     
+    # SAFEGUARD: Only cache files with version suffixes
+    # This prevents accidental caching of non-versioned files
+    if '_v_' not in filename:
+        error_msg = f"CACHE SAFEGUARD: Refusing to save file without version suffix!\n   Filename: {filename}\n   URL: {url}"
+        print(f"❌ {error_msg}")
+        logger.error(error_msg)
+        # Return False to indicate cache save was skipped
+        return False
+    
+    # DEBUG: Log what filename is being used
+    print(f"💾 SAVING TO CACHE: {filename}")
+    
     file_lock = get_file_lock(filename)
     
     with file_lock:
@@ -184,6 +231,36 @@ async def save_to_cache(url, content, headers=None):
         try:
             metadata_path = os.path.join(CACHE_DIR, f"{filename}.meta.json")
             version = extract_version_from_url(url)
+            
+            # Check if this is an update to an existing file
+            was_update = os.path.exists(cache_path)
+            old_size = 0
+            if was_update and os.path.exists(metadata_path):
+                try:
+                    with open(metadata_path, 'r', encoding='utf-8') as f:
+                        old_metadata = json.load(f)
+                    old_size = old_metadata.get('size', 0)
+                    old_version = old_metadata.get('version')
+                    
+                    # Log detailed version update information
+                    if old_version and old_version != version:
+                        size_diff = len(content) - old_size
+                        print(f"   📊 Version Comparison:")
+                        print(f"      Size: {format_bytes(old_size)} → {format_bytes(len(content))} ({size_diff:+,} bytes)")
+                        print(f"      Old URL: {old_metadata.get('url', 'N/A')}")
+                        print(f"      New URL: {url}")
+                        
+                        # Write to version change log file
+                        log_version_change(
+                            old_version=old_version,
+                            new_version=version,
+                            old_url=old_metadata.get('url', 'N/A'),
+                            new_url=url,
+                            old_size=old_size,
+                            new_size=len(content)
+                        )
+                except:
+                    pass
             
             # Save content atomically to disk
             temp_path = cache_path + '.tmp'
@@ -220,7 +297,10 @@ async def save_to_cache(url, content, headers=None):
                 cached_file = CachedFile(url=url, content=content, headers=headers)
                 MEMORY_CACHE[filename] = cached_file
             
-            logger.info(f"[CACHE SAVE] {filename} ({format_bytes(len(content))}, version: {version}) → disk + memory")
+            if was_update:
+                logger.info(f"[CACHE UPDATE] {filename} ({format_bytes(len(content))}, version: {version}) → disk + memory")
+            else:
+                logger.info(f"[CACHE SAVE] {filename} ({format_bytes(len(content))}, version: {version}) → disk + memory")
             return True
             
         except Exception as e:
@@ -248,7 +328,9 @@ def load_from_cache(url):
             if is_valid:
                 age_hours = (time.time() - cached_file.cached_at) / 3600
                 logger.info(f"[MEMORY HIT] {filename} ({format_bytes(cached_file.size)}, age: {age_hours:.1f}h)")
-                return cached_file.content, cached_file.to_metadata_dict()
+                metadata = cached_file.to_metadata_dict()
+                metadata['cache_level'] = 'memory'
+                return cached_file.content, metadata
             else:
                 logger.info(f"[MEMORY INVALIDATE] {filename}: {reason}")
                 del MEMORY_CACHE[filename]
@@ -270,17 +352,9 @@ def load_from_cache(url):
                 with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
             
-            # Check version
-            version_changed, current_version, cached_version = check_version_changed(url)
-            if version_changed:
-                logger.warning(f"[VERSION MISMATCH] {filename}: cached={cached_version}, current={current_version}")
-                logger.info(f"[DISK INVALIDATE] Removing {filename}: version changed")
-                
-                for path in [cache_path, metadata_path]:
-                    if os.path.exists(path):
-                        os.remove(path)
-                
-                return None, None
+            # Version check removed - we now cache multiple versions simultaneously
+            # Google load-balances between different versions, so we keep all versions
+            # and only expire based on age (24 hours)
             
             # Check age
             if metadata:
@@ -308,8 +382,10 @@ def load_from_cache(url):
                 if get_memory_cache_size() + len(content) > MEMORY_CACHE_MAX_SIZE_MB * 1024 * 1024:
                     evict_from_memory_cache()
                 
+                # Use cached URL from metadata to preserve original version info
+                cached_url = metadata.get('url', url) if metadata else url
                 cached_file = CachedFile(
-                    url=url,
+                    url=cached_url,
                     content=content,
                     headers={
                         'etag': metadata.get('etag'),
@@ -322,6 +398,10 @@ def load_from_cache(url):
                 MEMORY_CACHE[filename] = cached_file
                 age_hours = (time.time() - cached_file.cached_at) / 3600
                 logger.info(f"[DISK HIT] {filename} ({format_bytes(len(content))}, age: {age_hours:.1f}h) → stored in memory")
+            
+            # Add cache_level to metadata for reporting
+            if metadata:
+                metadata['cache_level'] = 'disk'
             
             return content, metadata
             

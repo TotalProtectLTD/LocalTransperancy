@@ -26,22 +26,55 @@ def extract_version_from_url(url):
         
         if '/main.dart.js' in path:
             version_path = path.rsplit('/main.dart.js', 1)[0]
+            if not version_path:
+                print(f"⚠️  VERSION EXTRACTION FAILED: Empty version path for URL: {url}")
             return version_path
         
         path_parts = path.rsplit('/', 1)
-        return path_parts[0] if len(path_parts) > 1 else None
+        result = path_parts[0] if len(path_parts) > 1 else None
+        if not result:
+            print(f"⚠️  VERSION EXTRACTION FAILED: No version found in URL: {url}")
+        return result
         
-    except Exception:
+    except Exception as e:
+        print(f"⚠️  VERSION EXTRACTION ERROR for URL {url}: {e}")
         return None
 
 
 def get_cache_filename(url):
-    """Generate cache filename from URL."""
+    """
+    Generate cache filename from URL including version to support multiple versions.
+    
+    Example:
+    URL: https://www.gstatic.com/.../acx-tfaar-tfaa-report-ui-frontend_auto_20251027-0645_RC000/main.dart.js
+    Returns: main.dart.js_v_acx-tfaar-tfaa-report-ui-frontend_auto_20251027-0645_RC000
+    
+    This allows caching multiple versions simultaneously since Google load-balances
+    between different versions.
+    """
+    import hashlib
+    
     parts = url.split('/')
     filename = parts[-1]
     
+    # Remove query parameters
     if '?' in filename:
         filename = filename.split('?')[0]
+    
+    # Extract version from URL path
+    version = extract_version_from_url(url)
+    
+    if version:
+        # Use last part of version path as unique identifier
+        version_id = version.split('/')[-1] if '/' in version else version
+        # Create safe filename with version
+        # Use hash if version_id is too long
+        if len(version_id) > 100:
+            version_hash = hashlib.md5(version_id.encode()).hexdigest()[:12]
+            cache_filename = f"{filename}_v_{version_hash}"
+        else:
+            cache_filename = f"{filename}_v_{version_id}"
+        return cache_filename
     
     return filename
 
@@ -71,20 +104,19 @@ class CachedFile:
             self.cache_control = None
     
     def is_valid(self, current_url):
-        """Check if cached file is still valid."""
-        # Check 1: Version validation
-        if VERSION_AWARE_CACHING:
-            current_version = extract_version_from_url(current_url)
-            if self.version != current_version:
-                return False, f"version changed: {self.version} → {current_version}"
+        """
+        Check if cached file is still valid.
         
-        # Check 2: Age validation
+        Note: Version checking is disabled because Google load-balances between
+        multiple versions. We cache all versions and only expire by age.
+        """
+        # Check 1: Age validation (disk cache age)
         if CACHE_MAX_AGE_HOURS > 0:
             age_hours = (time.time() - self.cached_at) / 3600
             if age_hours > CACHE_MAX_AGE_HOURS:
                 return False, f"age {age_hours:.1f}h > max {CACHE_MAX_AGE_HOURS}h"
         
-        # Check 3: Memory cache TTL
+        # Check 2: Memory cache TTL
         memory_age = time.time() - self.memory_cached_at
         if memory_age > MEMORY_CACHE_TTL_SECONDS:
             return False, f"memory cache stale ({memory_age:.0f}s > {MEMORY_CACHE_TTL_SECONDS}s)"
