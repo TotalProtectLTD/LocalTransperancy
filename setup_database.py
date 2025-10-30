@@ -93,6 +93,15 @@ def create_tables():
         );
         """,
         
+        # Advertisers lookup table
+        """
+        CREATE TABLE IF NOT EXISTS advertisers (
+            advertiser_id TEXT PRIMARY KEY,
+            advertiser_name TEXT NOT NULL,
+            advertiser_name_normalized TEXT
+        );
+        """,
+        
         # Create indexes for performance
         """
         CREATE INDEX IF NOT EXISTS idx_creative_status ON creatives(status);
@@ -137,6 +146,17 @@ def create_tables():
         
         """
         CREATE INDEX IF NOT EXISTS idx_creatives_fresh_created_at ON creatives_fresh(created_at);
+        """,
+        
+        # Indexes for advertisers table
+        """
+        CREATE INDEX IF NOT EXISTS idx_advertisers_name 
+        ON advertisers(advertiser_name);
+        """,
+        
+        """
+        CREATE INDEX IF NOT EXISTS idx_advertisers_name_normalized 
+        ON advertisers(advertiser_name_normalized);
         """,
         
         # Create function to auto-update updated_at
@@ -237,7 +257,7 @@ def show_sample_data():
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         # Show table structures
-        tables = ['creatives', 'scraping_sessions', 'scraping_logs', 'creatives_fresh']
+        tables = ['creatives', 'scraping_sessions', 'scraping_logs', 'creatives_fresh', 'advertisers']
         
         for table in tables:
             cursor.execute(f"""
