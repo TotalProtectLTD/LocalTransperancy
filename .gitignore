@@ -44,6 +44,10 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Database backups (ignore backup files, but keep folder structure)
+db_backups/*.sql
+!db_backups/README.md
+
 # Logs
 *.log
 

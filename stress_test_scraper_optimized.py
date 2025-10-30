@@ -113,10 +113,52 @@ DB_CONFIG = {
 }
 
 # Proxy Configuration (optional - if not provided, uses no proxy)
-PROXY_HOST = "hub-us-8.litport.net"
-PROXY_PORT = 31337  # HTTPS port
-PROXY_USERNAME = "7zQu8tyk"
-PROXY_PASSWORD = "l0n7LLeQiA"
+# Multiple proxies with round-robin rotation support
+PROXIES = [
+    {
+        "host": "hub-us-8.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "7zQu8tyk",
+        "password": "l0n7LLeQiA"
+    },
+    {
+        "host": "hub-us-8.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "cVlcv0AB",
+        "password": "867hnC5x8d"
+    },
+    {
+        "host": "hub-us-8.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "pGz76T35",
+        "password": "mo43glLtIBV"
+    },
+    {
+        "host": "hub-us-8.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "U62PUg",
+        "password": "6RJqlSRS30f"
+    },
+    {
+        "host": "hub-us-8.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "3j7Uzah",
+        "password": "4kUYVNQ0RJ"
+    },
+    {
+        "host": "hub-us-10.litport.net",
+        "port": 31337,  # HTTPS port
+        "username": "1YAXY4",
+        "password": "GuLy3fvu6d"
+    }
+    # Add more proxies here as needed
+    # {
+    #     "host": "hub-us-9.litport.net",
+    #     "port": 31337,
+    #     "username": "username2",
+    #     "password": "password2"
+    # },
+]
 
 
 # IP Rotation Configuration
@@ -324,6 +366,7 @@ def classify_error(error_msg: str) -> tuple[bool, str, str]:
         'Timeout',
         'BrokenPipeError',
         'socket hang up',           # Playwright network error
+        'Socket is closed',         # APIRequestContext socket errors
         'ECONNRESET',               # Node.js connection reset
         'ETIMEDOUT',                # Node.js timeout
         'ECONNREFUSED',             # Node.js connection refused
@@ -452,21 +495,225 @@ def get_statistics() -> Dict[str, int]:
 # PROXY UTILITIES
 # ============================================================================
 
+class ProxyRotator:
+    """
+    Thread-safe round-robin proxy rotator.
+    
+    Each call to get_next_proxy() returns the next proxy in the list,
+    cycling through all available proxies.
+    """
+    def __init__(self, proxies: List[Dict[str, Any]]):
+        """
+        Initialize proxy rotator.
+        
+        Args:
+            proxies: List of proxy dictionaries with host, port, username, password
+        """
+        self.proxies = proxies
+        self.index = 0
+        self.lock = asyncio.Lock()
+    
+    def get_next_proxy(self) -> Optional[Dict[str, str]]:
+        """
+        Get next proxy in round-robin fashion (thread-safe, sync version).
+        
+        Note: Prefer get_next_proxy_async() in async contexts.
+        
+        Returns:
+            Dict with server, username, password or None if no proxies configured
+        """
+        if not self.proxies:
+            return None
+        
+        # Use threading.Lock for sync access
+        import threading
+        if not hasattr(self, '_sync_lock'):
+            self._sync_lock = threading.Lock()
+        
+        with self._sync_lock:
+            proxy = self.proxies[self.index]
+            self.index = (self.index + 1) % len(self.proxies)
+            
+            return {
+                "server": f"http://{proxy['host']}:{proxy['port']}",  # HTTP proxy (works for HTTPS tunneling)
+                "username": proxy['username'],
+                "password": proxy['password']
+            }
+    
+    async def get_next_proxy_async(self) -> Optional[Dict[str, str]]:
+        """
+        Get next proxy in round-robin fashion (async, thread-safe).
+        
+        Returns:
+            Dict with server, username, password or None if no proxies configured
+        """
+        if not self.proxies:
+            return None
+        
+        async with self.lock:
+            proxy = self.proxies[self.index]
+            self.index = (self.index + 1) % len(self.proxies)
+            
+            return {
+                "server": f"http://{proxy['host']}:{proxy['port']}",  # HTTP proxy (works for HTTPS tunneling)
+                "username": proxy['username'],
+                "password": proxy['password']
+            }
+    
+    def get_proxy_count(self) -> int:
+        """Get number of configured proxies."""
+        return len(self.proxies)
+    
+    async def get_current_proxy_async(self) -> Optional[Dict[str, str]]:
+        """
+        Get current proxy without advancing index (for IP checking).
+        
+        Returns:
+            Dict with server, username, password or None if no proxies configured
+        """
+        if not self.proxies:
+            return None
+        
+        async with self.lock:
+            proxy = self.proxies[self.index]
+            
+            return {
+                "server": f"http://{proxy['host']}:{proxy['port']}",
+                "username": proxy['username'],
+                "password": proxy['password']
+            }
+
+
 def generate_proxy_config() -> Optional[Dict[str, str]]:
     """
-    Generate proxy configuration for main scraper.
+    Generate proxy configuration for main scraper (backward compatibility).
     
     Returns:
         Dict with server, username, password or None if no proxy configured
+        
+    Note: This is deprecated. Use ProxyRotator instead.
     """
-    if not PROXY_HOST or not PROXY_USERNAME or not PROXY_PASSWORD:
+    if not PROXIES:
         return None
     
+    # Return first proxy for backward compatibility
+    proxy = PROXIES[0]
     return {
-        "server": f"http://{PROXY_HOST}:{PROXY_PORT}",  # HTTP proxy (works for HTTPS tunneling)
-        "username": PROXY_USERNAME,
-        "password": PROXY_PASSWORD
+        "server": f"http://{proxy['host']}:{proxy['port']}",
+        "username": proxy['username'],
+        "password": proxy['password']
     }
+
+
+async def test_proxy_connectivity(proxy: Dict[str, Any], timeout: float = 10.0) -> tuple[bool, Optional[str], Optional[str]]:
+    """
+    Test if a proxy is working by attempting to get IP through it.
+    
+    Args:
+        proxy: Proxy dictionary with host, port, username, password
+        timeout: Request timeout in seconds
+    
+    Returns:
+        Tuple of (is_working, ip_address, error_message)
+        - is_working: True if proxy works, False otherwise
+        - ip_address: IP address if successful, None if failed
+        - error_message: Error description if failed, None if successful
+    """
+    try:
+        server = proxy['host']
+        port = proxy['port']
+        username = proxy['username']
+        password = proxy['password']
+        proxy_url = f"http://{username}:{password}@{server}:{port}"
+        
+        async with httpx.AsyncClient(proxy=proxy_url, timeout=timeout) as client:
+            response = await client.get('http://api.ipify.org?format=json')
+            
+            if response.status_code == 200:
+                data = response.json()
+                ip_address = data.get('ip')
+                if ip_address:
+                    return True, ip_address, None
+                else:
+                    return False, None, "No IP in response"
+            else:
+                return False, None, f"HTTP {response.status_code}"
+                
+    except ImportError as e:
+        if 'httpcore' in str(e) or 'asyncio' in str(e):
+            return False, None, "httpcore[asyncio] not installed. Run: pip install 'httpcore[asyncio]'"
+        return False, None, f"Import error: {str(e)[:60]}"
+    except httpx.TimeoutException:
+        return False, None, "Timeout"
+    except httpx.ProxyError as e:
+        return False, None, f"Proxy error: {str(e)[:60]}"
+    except httpx.ConnectError as e:
+        return False, None, f"Connection error: {str(e)[:60]}"
+    except Exception as e:
+        error_msg = str(e)
+        if 'httpcore' in error_msg or 'asyncio' in error_msg:
+            return False, None, "Install: pip install 'httpcore[asyncio]'"
+        return False, None, f"{type(e).__name__}: {error_msg[:60]}"
+
+
+async def test_all_proxies(proxies: List[Dict[str, Any]], timeout: float = 10.0) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Test all proxies in parallel and separate working from non-working ones.
+    
+    Args:
+        proxies: List of proxy dictionaries to test
+        timeout: Request timeout per proxy in seconds
+    
+    Returns:
+        Tuple of (working_proxies, failed_proxies)
+        - working_proxies: List of proxies that passed the test
+        - failed_proxies: List of dicts with proxy info and error message
+    """
+    if not proxies:
+        return [], []
+    
+    print(f"\n🧪 Testing {len(proxies)} proxy/proxies for connectivity...")
+    print("="*80)
+    
+    # Test all proxies in parallel
+    test_tasks = [
+        test_proxy_connectivity(proxy, timeout) 
+        for proxy in proxies
+    ]
+    results = await asyncio.gather(*test_tasks, return_exceptions=True)
+    
+    working_proxies = []
+    failed_proxies = []
+    
+    for i, (proxy, result) in enumerate(zip(proxies, results), 1):
+        proxy_name = f"{proxy['host']}:{proxy['port']}"
+        
+        if isinstance(result, Exception):
+            # Exception during testing
+            error_msg = f"{type(result).__name__}: {str(result)[:60]}"
+            print(f"  ❌ Proxy {i}: {proxy_name} - {error_msg}")
+            failed_proxies.append({
+                'proxy': proxy,
+                'error': error_msg
+            })
+        else:
+            is_working, ip_address, error_msg = result
+            if is_working:
+                print(f"  ✅ Proxy {i}: {proxy_name} - IP: {ip_address}")
+                working_proxies.append(proxy)
+            else:
+                print(f"  ❌ Proxy {i}: {proxy_name} - {error_msg or 'Failed'}")
+                failed_proxies.append({
+                    'proxy': proxy,
+                    'error': error_msg or 'Unknown error'
+                })
+    
+    print("="*80)
+    print(f"✓ Working proxies: {len(working_proxies)}/{len(proxies)}")
+    if failed_proxies:
+        print(f"✗ Failed proxies: {len(failed_proxies)}/{len(proxies)}")
+    
+    return working_proxies, failed_proxies
 
 
 async def get_current_ip(proxy_config: Optional[Dict[str, str]] = None) -> Optional[str]:
@@ -497,8 +744,20 @@ async def get_current_ip(proxy_config: Optional[Dict[str, str]] = None) -> Optio
                 response = await client.get('http://api.ipify.org?format=json')
                 data = response.json()
                 return data.get('ip')
+    except ImportError as e:
+        if 'httpcore' in str(e) or 'asyncio' in str(e):
+            print(f"  ⚠️  Failed to get IP: httpcore[asyncio] not installed")
+            print(f"      Run: pip install 'httpcore[asyncio]' or pip install -r requirements.txt")
+        else:
+            print(f"  ⚠️  Failed to get IP: {e}")
+        return None
     except Exception as e:
-        print(f"  ⚠️  Failed to get IP: {e}")
+        error_msg = str(e)
+        if 'httpcore' in error_msg or 'asyncio' in error_msg:
+            print(f"  ⚠️  Failed to get IP: httpcore[asyncio] not installed")
+            print(f"      Run: pip install 'httpcore[asyncio]' or pip install -r requirements.txt")
+        else:
+            print(f"  ⚠️  Failed to get IP: {e}")
         return None
 
 
@@ -575,7 +834,7 @@ async def rotate_ip_if_needed(force: bool = False) -> bool:
         return False
 
 
-async def rotation_monitor(max_concurrent: int, stats: Dict[str, Any], stats_lock: asyncio.Lock):
+async def rotation_monitor(max_concurrent: int, stats: Dict[str, Any], stats_lock: asyncio.Lock, proxy_rotator: Optional[ProxyRotator] = None):
     """
     Background task that monitors and triggers IP rotation every 7 minutes.
     
@@ -583,6 +842,7 @@ async def rotation_monitor(max_concurrent: int, stats: Dict[str, Any], stats_loc
         max_concurrent: Maximum number of concurrent workers allowed
         stats: Shared statistics dictionary
         stats_lock: Lock for updating shared statistics
+        proxy_rotator: Optional proxy rotator for checking IP
     """
     global _last_rotation_time, _active_workers_count
     
@@ -609,8 +869,11 @@ async def rotation_monitor(max_concurrent: int, stats: Dict[str, Any], stats_loc
                     
                     await rotate_ip_if_needed(force=False)
                     
-                    # Check current IP after rotation
-                    proxy_config = generate_proxy_config()
+                    # Check current IP after rotation (use current proxy without advancing)
+                    if proxy_rotator:
+                        proxy_config = await proxy_rotator.get_current_proxy_async()
+                    else:
+                        proxy_config = generate_proxy_config()
                     current_ip = await get_current_ip(proxy_config)
                     if current_ip:
                         print(f"  ✓ New IP: {current_ip}")
@@ -885,7 +1148,7 @@ async def scrape_batch_optimized(
 async def worker(
     worker_id: int,
     semaphore: asyncio.Semaphore,
-    proxy_config: Optional[Dict[str, str]],
+    proxy_rotator: Optional[ProxyRotator],
     stats: Dict[str, Any],
     stats_lock: asyncio.Lock,
     show_cache_stats: bool = True,
@@ -900,7 +1163,7 @@ async def worker(
     Args:
         worker_id: Unique worker identifier
         semaphore: Semaphore to control concurrency
-        proxy_config: Optional proxy configuration
+        proxy_rotator: Optional proxy rotator for round-robin proxy rotation
         stats: Shared statistics dictionary
         stats_lock: Lock for updating shared statistics
         show_cache_stats: If True, display cache statistics
@@ -940,6 +1203,14 @@ async def worker(
                 if not creative_batch:
                     # No more pending URLs in database
                     break
+                
+                # Get next proxy for this batch (round-robin rotation)
+                proxy_config = await proxy_rotator.get_next_proxy_async() if proxy_rotator else None
+                
+                # Log which proxy this batch is using
+                if proxy_config:
+                    proxy_server = proxy_config['server'].replace('http://', '')
+                    print(f"  [Worker {worker_id}] 🔄 Using proxy: {proxy_server}")
                 
                 # Scrape entire batch (optimized with session reuse)
                 results = await scrape_batch_optimized(creative_batch, proxy_config, worker_id, use_partial_proxy)
@@ -1058,8 +1329,24 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     _workers_lock = asyncio.Lock()
     _active_workers_count = 0
     
-    # Setup proxy
-    proxy_config = generate_proxy_config() if use_proxy else None
+    # Setup proxy rotator with health testing
+    proxy_rotator = None
+    working_proxies = []
+    failed_proxies = []
+    
+    if use_proxy and PROXIES:
+        # Test all proxies before using them
+        working_proxies, failed_proxies = await test_all_proxies(PROXIES, timeout=10.0)
+        
+        if working_proxies:
+            proxy_rotator = ProxyRotator(working_proxies)
+            print(f"\n✅ Using {len(working_proxies)} working proxy/proxies for scraping")
+        else:
+            print(f"\n⚠️  No working proxies found! All {len(PROXIES)} proxies failed the health check.")
+            print("   Continuing without proxies (direct connection)")
+            proxy_rotator = None
+    elif use_proxy and not PROXIES:
+        print("  ⚠️  Proxy enabled but no proxies configured")
     
     print(f"\nStress Test Configuration:")
     print(f"  Max concurrent: {max_concurrent} workers")
@@ -1067,8 +1354,18 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     print(f"  URLs to process: {total_pending}")
     print(f"  Optimization:   Session reuse (1 HTML + {batch_size-1} API-only per batch)")
     print(f"  Bandwidth:      ~181 KB/creative (65% savings vs 524 KB)")
-    if proxy_config:
-        print(f"  Proxy:          {PROXY_HOST}:{PROXY_PORT}")
+    if proxy_rotator:
+        proxy_count = proxy_rotator.get_proxy_count()
+        print(f"  Proxies:        {proxy_count} working proxy/proxies with round-robin rotation")
+        for i, proxy in enumerate(working_proxies, 1):
+            print(f"    Proxy {i}:      {proxy['host']}:{proxy['port']}")
+        print(f"  Rotation:       Each batch gets next proxy sequentially")
+        print(f"  Distribution:  With {max_concurrent} workers, proxies will rotate evenly across batches")
+        if failed_proxies:
+            print(f"\n  Failed proxies ({len(failed_proxies)}):")
+            for failed in failed_proxies:
+                p = failed['proxy']
+                print(f"    ❌ {p['host']}:{p['port']} - {failed['error']}")
         if use_partial_proxy:
             print(f"  Proxy mode:     Partial (HTML+API only, content.js direct)")
             print(f"  Proxy savings:  ~70% bandwidth reduction")
@@ -1097,10 +1394,16 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
         print("="*80)
         await rotate_ip_if_needed(force=force_rotation)
     
-    # Check current IP
+    # Check current IP (using first proxy if available)
     print("\n🔄 Checking current IP...")
     try:
-        current_ip = await get_current_ip(proxy_config)
+        # Get first proxy config for IP check (without advancing index)
+        if proxy_rotator:
+            first_proxy_config = await proxy_rotator.get_current_proxy_async()
+        else:
+            first_proxy_config = None
+        
+        current_ip = await get_current_ip(first_proxy_config)
         if current_ip:
             print(f"✓ Current IP: {current_ip}")
         else:
@@ -1138,13 +1441,13 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     try:
         # Create worker tasks
         workers = [
-            worker(i, semaphore, proxy_config, stats, stats_lock, show_cache_stats, batch_size, use_partial_proxy)
+            worker(i, semaphore, proxy_rotator, stats, stats_lock, show_cache_stats, batch_size, use_partial_proxy)
             for i in range(max_concurrent)
         ]
         
         # Start rotation monitor as background task (only if rotation is enabled)
         if enable_rotation:
-            monitor_task = asyncio.create_task(rotation_monitor(max_concurrent, stats, stats_lock))
+            monitor_task = asyncio.create_task(rotation_monitor(max_concurrent, stats, stats_lock, proxy_rotator))
         else:
             monitor_task = None
         
