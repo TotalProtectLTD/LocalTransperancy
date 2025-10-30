@@ -203,13 +203,14 @@ def batch_get_advertiser_ids(advertiser_names: List[str]) -> Dict[str, List[str]
 # INSERT FUNCTIONS
 # ============================================================================
 
-def insert_advertiser(advertiser_id: str, advertiser_name: str, skip_duplicate: bool = True) -> bool:
+def insert_advertiser(advertiser_id: str, advertiser_name: str, country: Optional[str] = None, skip_duplicate: bool = True) -> bool:
     """
     Insert a single advertiser (with duplicate handling).
     
     Args:
         advertiser_id: Advertiser ID
         advertiser_name: Advertiser name
+        country: Optional country code (e.g., 'US', 'CA', 'FR')
         skip_duplicate: If True, skip on conflict (no error). If False, raise error on conflict.
     
     Returns:
@@ -222,15 +223,15 @@ def insert_advertiser(advertiser_id: str, advertiser_name: str, skip_duplicate: 
             
             if skip_duplicate:
                 cursor.execute("""
-                    INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized, country)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT (advertiser_id) DO NOTHING
-                """, (advertiser_id, advertiser_name, normalized))
+                """, (advertiser_id, advertiser_name, normalized, country))
             else:
                 cursor.execute("""
-                    INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized)
-                    VALUES (%s, %s, %s)
-                """, (advertiser_id, advertiser_name, normalized))
+                    INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized, country)
+                    VALUES (%s, %s, %s, %s)
+                """, (advertiser_id, advertiser_name, normalized, country))
             
             conn.commit()
             inserted = cursor.rowcount > 0
@@ -248,7 +249,7 @@ def insert_advertiser(advertiser_id: str, advertiser_name: str, skip_duplicate: 
 
 
 def batch_insert_advertisers(
-    advertisers: List[Tuple[str, str]], 
+    advertisers: List[Tuple], 
     batch_size: int = 1000,
     skip_duplicate: bool = True
 ) -> Dict[str, int]:
@@ -256,7 +257,9 @@ def batch_insert_advertisers(
     Batch insert advertisers with duplicate handling and statistics.
     
     Args:
-        advertisers: List of tuples (advertiser_id, advertiser_name)
+        advertisers: List of tuples, either:
+                     - (advertiser_id, advertiser_name) for backward compatibility
+                     - (advertiser_id, advertiser_name, country) with country code
         batch_size: Number of rows to insert per batch
         skip_duplicate: If True, skip duplicates without error
     
@@ -277,17 +280,25 @@ def batch_insert_advertisers(
                 batch = advertisers[i:i + batch_size]
                 
                 # Prepare batch data with normalized names
-                batch_data = [
-                    (adv_id, adv_name, normalize_name(adv_name))
-                    for adv_id, adv_name in batch
-                ]
+                # Handle both (id, name) and (id, name, country) tuple formats
+                batch_data = []
+                for item in batch:
+                    if len(item) == 2:
+                        adv_id, adv_name = item
+                        country = None
+                    elif len(item) == 3:
+                        adv_id, adv_name, country = item
+                    else:
+                        raise ValueError(f"Invalid tuple format: expected 2 or 3 elements, got {len(item)}")
+                    
+                    batch_data.append((adv_id, adv_name, normalize_name(adv_name), country))
                 
                 try:
                     if skip_duplicate:
                         # Use executemany with ON CONFLICT
                         cursor.executemany("""
-                            INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized)
-                            VALUES (%s, %s, %s)
+                            INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized, country)
+                            VALUES (%s, %s, %s, %s)
                             ON CONFLICT (advertiser_id) DO NOTHING
                         """, batch_data)
                         batch_inserted = cursor.rowcount
@@ -295,8 +306,8 @@ def batch_insert_advertisers(
                         stats['skipped'] += len(batch) - batch_inserted
                     else:
                         cursor.executemany("""
-                            INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized)
-                            VALUES (%s, %s, %s)
+                            INSERT INTO advertisers (advertiser_id, advertiser_name, advertiser_name_normalized, country)
+                            VALUES (%s, %s, %s, %s)
                         """, batch_data)
                         stats['inserted'] += len(batch)
                     
@@ -306,8 +317,8 @@ def batch_insert_advertisers(
                     if skip_duplicate:
                         # Fall back to individual inserts if batch fails
                         conn.rollback()
-                        for adv_id, adv_name, normalized in batch_data:
-                            if insert_advertiser(adv_id, adv_name, skip_duplicate=True):
+                        for adv_id, adv_name, normalized, country in batch_data:
+                            if insert_advertiser(adv_id, adv_name, country=country, skip_duplicate=True):
                                 stats['inserted'] += 1
                             else:
                                 stats['skipped'] += 1

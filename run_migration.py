@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Safe Migration Runner - Create Advertisers Table Only
+Safe Migration Runner
 
-This script safely runs ONLY the advertisers table migration.
-It will NOT touch existing tables or data.
+This script safely runs database migrations.
+It will NOT touch existing tables or data unless explicitly required.
+Usage: python3 run_migration.py [migration_number]
+Example: python3 run_migration.py 002
 """
 
 import psycopg2
@@ -85,14 +87,25 @@ def verify_creatives_fresh_safe():
     return True
 
 
-def run_migration():
-    """Run the advertisers table migration."""
-    migration_file = Path(__file__).parent / 'migrations' / '001_create_advertisers_table.sql'
+def run_migration(migration_number: str = '001'):
+    """
+    Run a specific migration.
     
-    if not migration_file.exists():
-        print(f"❌ Migration file not found: {migration_file}")
+    Args:
+        migration_number: Migration number (e.g., '001', '002')
+    """
+    migration_file = Path(__file__).parent / 'migrations' / f'{migration_number}_*.sql'
+    
+    # Find migration file with the given number
+    migrations_dir = Path(__file__).parent / 'migrations'
+    matching_files = list(migrations_dir.glob(f'{migration_number}_*.sql'))
+    
+    if not matching_files:
+        print(f"❌ Migration file not found for number: {migration_number}")
+        print(f"   Searched in: {migrations_dir}")
         return False
     
+    migration_file = matching_files[0]
     print(f"\n📄 Reading migration file: {migration_file.name}")
     
     # Read migration SQL
@@ -103,19 +116,28 @@ def run_migration():
         print(f"❌ Error reading migration file: {e}")
         return False
     
-    # Check if advertisers table already exists
-    if verify_table_exists('advertisers'):
-        print("\n⚠️  WARNING: advertisers table already exists!")
-        print("   This migration will be skipped (uses IF NOT EXISTS)")
-        print("   Your existing data in advertisers table is safe.")
-        response = input("\nContinue anyway? (yes/no): ")
-        if response.lower() != 'yes':
+    # Migration-specific checks
+    if migration_number == '001':
+        # Check if advertisers table already exists
+        if verify_table_exists('advertisers'):
+            print("\n⚠️  WARNING: advertisers table already exists!")
+            print("   This migration will be skipped (uses IF NOT EXISTS)")
+            print("   Your existing data in advertisers table is safe.")
+            response = input("\nContinue anyway? (yes/no): ")
+            if response.lower() != 'yes':
+                return False
+        
+        # Verify creatives_fresh is safe
+        if not verify_creatives_fresh_safe():
+            print("\n❌ Migration cancelled for safety.")
             return False
-    
-    # Verify creatives_fresh is safe
-    if not verify_creatives_fresh_safe():
-        print("\n❌ Migration cancelled for safety.")
-        return False
+    elif migration_number == '002':
+        # Verify advertisers table exists (required for migration 002)
+        if not verify_table_exists('advertisers'):
+            print("\n❌ ERROR: advertisers table does not exist!")
+            print("   Please run migration 001 first.")
+            return False
+        print("✅ advertisers table exists - safe to add country column")
     
     # Run migration
     print("\n🔄 Running migration...")
@@ -127,28 +149,52 @@ def run_migration():
         cursor.execute(migration_sql)
         conn.commit()
         
-        # Verify table was created
-        if verify_table_exists('advertisers'):
-            print("✅ Migration completed successfully!")
-            
-            # Get table info
+        print("✅ Migration completed successfully!")
+        
+        # Migration-specific verification
+        if migration_number == '001':
+            # Verify table was created
+            if verify_table_exists('advertisers'):
+                # Get table info
+                cursor.execute("""
+                    SELECT COUNT(*) FROM advertisers
+                """)
+                count = cursor.fetchone()[0]
+                print(f"   advertisers table created with {count} row(s)")
+                
+                # Show indexes
+                cursor.execute("""
+                    SELECT indexname 
+                    FROM pg_indexes 
+                    WHERE tablename = 'advertisers'
+                    ORDER BY indexname;
+                """)
+                indexes = cursor.fetchall()
+                print(f"   Indexes created: {len(indexes)}")
+                for idx in indexes:
+                    print(f"     • {idx[0]}")
+        elif migration_number == '002':
+            # Verify country column was added
             cursor.execute("""
-                SELECT COUNT(*) FROM advertisers
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns 
+                WHERE table_name = 'advertisers' 
+                AND column_name = 'country';
             """)
-            count = cursor.fetchone()[0]
-            print(f"   advertisers table created with {count} row(s)")
+            column_info = cursor.fetchone()
+            if column_info:
+                print(f"   ✅ country column added: {column_info[0]} ({column_info[1]}, nullable: {column_info[2]})")
             
-            # Show indexes
+            # Verify index was created
             cursor.execute("""
                 SELECT indexname 
                 FROM pg_indexes 
-                WHERE tablename = 'advertisers'
-                ORDER BY indexname;
+                WHERE tablename = 'advertisers' 
+                AND indexname = 'idx_advertisers_country';
             """)
-            indexes = cursor.fetchall()
-            print(f"   Indexes created: {len(indexes)}")
-            for idx in indexes:
-                print(f"     • {idx[0]}")
+            index_info = cursor.fetchone()
+            if index_info:
+                print(f"   ✅ Index created: {index_info[0]}")
         
         cursor.close()
         conn.close()
@@ -163,14 +209,24 @@ def run_migration():
 
 def main():
     """Main function."""
+    # Get migration number from command line args, default to 001
+    migration_number = sys.argv[1] if len(sys.argv) > 1 else '001'
+    
+    migration_descriptions = {
+        '001': 'Create Advertisers Table',
+        '002': 'Add Country Column to Advertisers Table'
+    }
+    
+    description = migration_descriptions.get(migration_number, f'Migration {migration_number}')
+    
     print("=" * 60)
-    print("SAFE MIGRATION: Create Advertisers Table")
+    print(f"SAFE MIGRATION: {description}")
     print("=" * 60)
     print("\nThis script will:")
-    print("  ✅ Create ONLY the advertisers table")
-    print("  ✅ NOT modify creatives_fresh or any other tables")
-    print("  ✅ NOT drop or alter any existing data")
-    print("  ✅ Use IF NOT EXISTS - safe to run multiple times")
+    print("  ✅ Run migration safely")
+    print("  ✅ NOT modify creatives_fresh or any other tables unnecessarily")
+    print("  ✅ NOT drop or alter existing data")
+    print("  ✅ Use IF NOT EXISTS / IF NOT EXISTS - safe to run multiple times")
     
     # Test connection
     if not test_connection():
@@ -178,7 +234,7 @@ def main():
         sys.exit(1)
     
     # Run migration
-    if run_migration():
+    if run_migration(migration_number):
         print("\n" + "=" * 60)
         print("✅ MIGRATION COMPLETE!")
         print("=" * 60)

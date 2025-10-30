@@ -98,7 +98,8 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS advertisers (
             advertiser_id TEXT PRIMARY KEY,
             advertiser_name TEXT NOT NULL,
-            advertiser_name_normalized TEXT
+            advertiser_name_normalized TEXT,
+            country TEXT
         );
         """,
         
@@ -157,6 +158,11 @@ def create_tables():
         """
         CREATE INDEX IF NOT EXISTS idx_advertisers_name_normalized 
         ON advertisers(advertiser_name_normalized);
+        """,
+        
+        """
+        CREATE INDEX IF NOT EXISTS idx_advertisers_country 
+        ON advertisers(country);
         """,
         
         # Create function to auto-update updated_at
