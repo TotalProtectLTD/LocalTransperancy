@@ -65,3 +65,11 @@ debug/
 .env
 config/.env
 
+# GCS exports (downloaded CSV files)
+gcs_exports/
+
+# Credentials and secrets (NEVER commit these)
+config/bigquery-credentials.json
+*.credentials.json
+*credentials*.json
+
