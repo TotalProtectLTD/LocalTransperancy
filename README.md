@@ -2,6 +2,37 @@
 
 A Python-based local client that helps the server Transparency project execute parsing tasks and upload data to server databases. This project scrapes Google Ads Transparency Center to extract YouTube videos, App Store IDs, and creative metadata.
 
+## 📚 Documentation
+
+### Getting Started
+- **[START_HERE.md](START_HERE.md)** - First-time setup guide ⭐ **START HERE**
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick start examples
+- **[INSTALLATION_CHECKLIST.md](INSTALLATION_CHECKLIST.md)** - Installation checklist
+- **[DATA_SAFETY_GUARANTEE.md](DATA_SAFETY_GUARANTEE.md)** - Important data safety information
+
+### Core Documentation
+- **[docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md)** - PostgreSQL setup guide
+- **[docs/DATABASE_CONFIG.md](docs/DATABASE_CONFIG.md)** - Database configuration
+- **[docs/IMPORT_GUIDE.md](docs/IMPORT_GUIDE.md)** - Data import guide
+- **[docs/ERROR_LOGGING_GUIDE.md](docs/ERROR_LOGGING_GUIDE.md)** - Error logging guide
+
+### Specialized Documentation
+
+**Cache System** ([docs/cache/](docs/cache/))
+- Complete cache system documentation with two-level caching, version tracking
+- See [docs/cache/CACHE_DOCUMENTATION_INDEX.md](docs/cache/CACHE_DOCUMENTATION_INDEX.md) for navigation
+
+**Workflows** ([docs/workflows/](docs/workflows/))
+- Daily advertisers data pipeline
+- CSV upload strategies
+- See [docs/workflows/README.md](docs/workflows/README.md)
+
+**Reference Guides** ([docs/reference/](docs/reference/))
+- Optimized scraper documentation
+- Proxy configuration guides
+- Technical references
+- See [docs/reference/README.md](docs/reference/README.md)
+
 ## Project Overview
 
 **Local Transparency** runs on localhost and performs:
@@ -49,7 +80,7 @@ brew services start postgresql@18
 sudo apt install postgresql postgresql-contrib
 sudo systemctl start postgresql
 
-# For detailed setup instructions, see DATABASE_SETUP.md
+# For detailed setup instructions, see docs/DATABASE_SETUP.md
 ```
 
 Create database and user:
@@ -65,7 +96,7 @@ GRANT ALL PRIVILEGES ON DATABASE local_transparency TO transparency_user;
 \q
 ```
 
-**For complete PostgreSQL setup guide, see `DATABASE_SETUP.md`**
+**For complete PostgreSQL setup guide, see `docs/DATABASE_SETUP.md`**
 
 ### Step 3: Install Python Dependencies
 
@@ -114,7 +145,6 @@ You should see the help message with usage instructions.
 - **`stress_test_scraper.py`**: Concurrent stress tester for batch processing
 - **`requirements.txt`**: Python package dependencies
 - **`README.md`**: This file
-- **`DATABASE_SETUP.md`**: PostgreSQL installation and configuration guide
 
 ### Generated Files (created during usage)
 - **`debug/`**: Debug output folder (created when using debug flags)
@@ -276,7 +306,7 @@ kill -9 <PID>
 
 The Local Transparency project uses PostgreSQL for storing scraping results and managing data.
 
-**See `DATABASE_SETUP.md` for complete PostgreSQL setup instructions**, including:
+**See `docs/DATABASE_SETUP.md` for complete PostgreSQL setup instructions**, including:
 - Installation on macOS, Linux, Windows
 - Database and user creation
 - Table schema with indexes
@@ -364,4 +394,3 @@ Internal Use - Ad Transparency Investigation Team
 
 **Author**: Ad Transparency Investigation Team  
 **Date**: October 2025
-
