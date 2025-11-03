@@ -297,7 +297,7 @@ def get_pending_batch_and_mark_processing(batch_size: int = None) -> List[Dict[s
                 SELECT id, creative_id, advertiser_id
                 FROM creatives_fresh
                 WHERE status = 'pending'
-                ORDER BY RANDOM()
+                ORDER BY created_at
                 LIMIT %s
                 FOR UPDATE SKIP LOCKED
             )
@@ -410,7 +410,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                 SET status = 'completed',
                     video_count = %s,
                     video_ids = %s,
-                    appstore_id = %s,
+                    appstore_id = NULLIF(BTRIM(%s), ''),
                     funded_by = %s,
                     scraped_at = %s,
                     error_message = NULL

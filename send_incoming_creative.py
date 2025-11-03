@@ -67,9 +67,8 @@ def claim_rows(limit: int) -> List[Dict[str, Any]]:
             SELECT cf.id
             FROM creatives_fresh cf
             WHERE cf.status IN ('completed', 'sync_failed')
-              AND (cf.sync IS FALSE OR cf.sync IS NULL)
+              AND (cf.sync IS NOT TRUE)
               AND cf.appstore_id IS NOT NULL
-              AND btrim(cf.appstore_id) <> ''
             ORDER BY cf.created_at
             LIMIT %s
             FOR UPDATE SKIP LOCKED
@@ -115,9 +114,8 @@ def select_rows_preview(limit: int) -> List[Dict[str, Any]]:
         FROM creatives_fresh cf
         LEFT JOIN advertisers a ON a.advertiser_id = cf.advertiser_id
         WHERE cf.status IN ('completed', 'sync_failed')
-          AND (cf.sync IS FALSE OR cf.sync IS NULL)
+          AND (cf.sync IS NOT TRUE)
           AND cf.appstore_id IS NOT NULL
-          AND btrim(cf.appstore_id) <> ''
         ORDER BY cf.created_at
         LIMIT %s
     """
