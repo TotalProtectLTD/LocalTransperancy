@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-BigQuery Query Export to GCS and Download
+BigQuery Creatives Query Export to GCS and Download
 
-Executes a custom BigQuery query and exports results to Google Cloud Storage,
+Executes a BigQuery query for creatives and exports results to Google Cloud Storage,
 then downloads the file to localhost.
 
 Flow: BigQuery Query → Export Results to GCS → Download to Localhost
@@ -11,13 +11,17 @@ Flow: BigQuery Query → Export Results to GCS → Download to Localhost
 import os
 import sys
 import json
+import csv
+import tempfile
 import time
 import traceback
-from datetime import datetime
-from typing import Optional, Dict, Any, List
+import argparse
+from datetime import datetime, date
+from typing import Optional, Dict, Any, List, Tuple
 from google.cloud import bigquery, storage
 from google.oauth2 import service_account
 from google.cloud.exceptions import NotFound, GoogleCloudError
+import psycopg2
 
 
 # ============================================================================
@@ -30,7 +34,7 @@ BIGQUERY_LOCATION = "US"  # CRITICAL: Must be 'US' for US public datasets
 
 # GCS Bucket
 GCS_BUCKET_NAME = "youtubeilike-temp-exports"
-GCS_FILE_PREFIX = "daily_advertisers_export_"
+GCS_FILE_PREFIX = "daily_creatives_export_"
 
 # Credentials path (relative to project root)
 CREDENTIALS_PATH = os.path.join(
@@ -45,15 +49,48 @@ LOCAL_EXPORT_DIR = os.path.join(
     "gcs_exports"
 )
 
-# BigQuery Query
-BIGQUERY_QUERY = """
-SELECT DISTINCT
-  advertiser_id,
-  advertiser_disclosed_name,
-  advertiser_location
-FROM `bigquery-public-data.google_ads_transparency_center.creative_stats`
-WHERE advertiser_id IS NOT NULL
+# PostgreSQL Database (see docs/DB_OVERVIEW.md)
+DB_CONFIG = {
+    'host': 'localhost',
+    'database': 'local_transparency',
+    'user': 'transparency_user',
+    'password': 'transparency_pass_2025',
+    'port': 5432,
+}
+
+
+# ============================================================================
+# QUERY GENERATION
+# ============================================================================
+
+def build_creatives_query(target_date: date) -> str:
+    """
+    Build the BigQuery query for creatives with the specified date.
+    
+    Args:
+        target_date: Target date for filtering creatives (earliest_date)
+        
+    Returns:
+        SQL query string
+    """
+    date_str = target_date.strftime('%Y-%m-%d')
+    
+    query = f"""
+WITH per_creative AS (
+  SELECT
+    cs.creative_id,
+    ANY_VALUE(cs.advertiser_id) AS advertiser_id,
+    MIN(PARSE_DATE('%Y-%m-%d', rs.first_shown)) AS earliest_date
+  FROM bigquery-public-data.google_ads_transparency_center.creative_stats  AS cs
+  CROSS JOIN UNNEST(cs.region_stats) AS rs
+  WHERE cs.ad_format_type = 'VIDEO'
+  GROUP BY cs.creative_id
+)
+SELECT creative_id, advertiser_id
+FROM per_creative
+WHERE earliest_date = DATE '{date_str}';
 """
+    return query
 
 
 # ============================================================================
@@ -206,6 +243,8 @@ def execute_query_and_export_to_gcs(
         }
     """
     start_time = datetime.utcnow()
+    temp_table_ref = None
+    temp_table_id = None
     
     try:
         # Generate blob name if not provided
@@ -226,12 +265,12 @@ def execute_query_and_export_to_gcs(
         # BigQuery requires writing query results to a table first, then exporting
         # Create a temporary table reference in the project's dataset
         dataset_ref = bq_client.dataset("transparency_data", project=PROJECT_ID)
-        temp_table_name = f"_temp_advertisers_export_{int(datetime.utcnow().timestamp())}"
+        temp_table_name = f"_temp_creatives_export_{int(datetime.utcnow().timestamp())}"
         temp_table_ref = dataset_ref.table(temp_table_name)
         temp_table_id = f"{PROJECT_ID}.transparency_data.{temp_table_name}"
         
         print("Executing query to temporary table...")
-        print(f"Query: {query[:100]}..." if len(query) > 100 else f"Query: {query}")
+        print(f"Full Query:\n{query}")
         
         # Configure query job to write results to temporary table
         job_config = bigquery.QueryJobConfig()
@@ -512,6 +551,107 @@ def download_from_gcs(
 
 
 # ============================================================================
+# POSTGRES IMPORT (STAGING + COPY + UPSERT)
+# ============================================================================
+
+def normalize_source_to_two_columns(source_csv_path: str) -> Tuple[str, int, int]:
+    """
+    Create a temp CSV with only columns: creative_id, advertiser_id.
+    Returns: (temp_csv_path, total_rows_read, rows_written)
+    """
+    total_read = 0
+    total_written = 0
+
+    tmp = tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False, newline='')
+    tmp_path = tmp.name
+
+    try:
+        with open(source_csv_path, 'r', encoding='utf-8', newline='') as f_in, tmp:
+            sample = f_in.read(2048)
+            f_in.seek(0)
+            try:
+                delimiter = csv.Sniffer().sniff(sample).delimiter
+            except Exception:
+                delimiter = ','
+
+            reader = csv.DictReader(f_in, delimiter=delimiter)
+
+            writer = csv.writer(tmp)
+            writer.writerow(['creative_id', 'advertiser_id'])
+
+            for row in reader:
+                total_read += 1
+                creative_id = (row.get('creative_id') or '').strip()
+                advertiser_id = (row.get('advertiser_id') or '').strip()
+                if not creative_id or not advertiser_id:
+                    continue
+                writer.writerow([creative_id, advertiser_id])
+                total_written += 1
+
+        return tmp_path, total_read, total_written
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        raise
+
+
+def upsert_from_normalized_csv(csv_path: str, target_date: date) -> Tuple[int, int]:
+    """
+    Upsert creatives from a two-column CSV using staging + COPY.
+
+    Sets created_at for both new rows and duplicates to the provided target_date
+    (cast to timestamp at midnight).
+
+    Returns: (staged_rows, upserted_rows)
+    """
+    created_at_literal = target_date.strftime('%Y-%m-%d')  # DATE literal, casts to timestamp
+
+    conn = psycopg2.connect(**DB_CONFIG)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TEMP TABLE staging_daily_creatives (
+                        creative_id   TEXT,
+                        advertiser_id TEXT
+                    ) ON COMMIT DROP;
+                """)
+
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    cur.copy_expert(
+                        """
+                        COPY staging_daily_creatives (creative_id, advertiser_id)
+                        FROM STDIN WITH (FORMAT CSV, HEADER TRUE)
+                        """,
+                        f
+                    )
+
+                cur.execute("SELECT COUNT(*) FROM staging_daily_creatives;")
+                staged = cur.fetchone()[0]
+
+                # Insert and upsert with created_at set to the import's target date
+                cur.execute(
+                    """
+                    INSERT INTO creatives_fresh (creative_id, advertiser_id, created_at)
+                    SELECT creative_id, advertiser_id, %s::timestamp
+                    FROM staging_daily_creatives
+                    ON CONFLICT (creative_id)
+                    DO UPDATE SET
+                        advertiser_id = EXCLUDED.advertiser_id,
+                        created_at    = EXCLUDED.created_at;
+                    """,
+                    (created_at_literal,)
+                )
+                upserted = cur.rowcount
+
+        return staged, upserted
+    finally:
+        conn.close()
+
+
+# ============================================================================
 # CHECK EXISTING FILE IN GCS
 # ============================================================================
 
@@ -556,7 +696,7 @@ def cleanup_old_files_from_gcs(
     Args:
         storage_client: GCS storage client
         bucket_name: GCS bucket name
-        file_prefix: Prefix to match files (e.g., "daily_advertisers_export_")
+        file_prefix: Prefix to match files (e.g., "daily_creatives_export_")
         current_date: Today's date in YYYYMMDD format
         
     Returns:
@@ -584,7 +724,7 @@ def cleanup_old_files_from_gcs(
         print(f"  Found {len(blobs)} file(s) with prefix '{file_prefix}'")
         
         for blob in blobs:
-            # Extract date from filename (format: daily_advertisers_export_YYYYMMDD.csv)
+            # Extract date from filename (format: daily_creatives_export_YYYYMMDD.csv)
             # Get the part after the prefix and before .csv
             filename = blob.name
             if not filename.startswith(file_prefix) or not filename.endswith('.csv'):
@@ -637,9 +777,53 @@ def cleanup_old_files_from_gcs(
 
 def main() -> int:
     """Main execution function."""
+    parser = argparse.ArgumentParser(
+        description='Export creatives from BigQuery to GCS, download, and optionally import to PostgreSQL',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Export creatives for today's date
+  %(prog)s
+
+  # Export creatives for a specific date
+  %(prog)s --date 2025-11-01
+
+  # Export creatives for yesterday
+  %(prog)s --date $(date -d yesterday +%%Y-%%m-%%d)
+
+  # Export and import into PostgreSQL (created_at set to target date)
+  %(prog)s --date 2025-10-31 --import-db
+        """
+    )
+    
+    parser.add_argument(
+        '--date',
+        type=str,
+        help='Target date in YYYY-MM-DD format (default: today)',
+        default=None
+    )
+    parser.add_argument(
+        '--import-db',
+        action='store_true',
+        help='After download, import CSV into PostgreSQL creatives_fresh using staging + COPY + upsert'
+    )
+    
+    args = parser.parse_args()
+    
+    # Parse date argument
+    if args.date:
+        try:
+            target_date = datetime.strptime(args.date, '%Y-%m-%d').date()
+        except ValueError:
+            print(f"✗ Invalid date format: {args.date}. Expected YYYY-MM-DD format.")
+            return 1
+    else:
+        target_date = date.today()
+    
     print("\n" + "="*80)
-    print("BigQuery Query → GCS → Download Workflow")
+    print("BigQuery Creatives Query → GCS → Download Workflow")
     print("="*80 + "\n")
+    print(f"Target date: {target_date}")
     
     try:
         # Verify credentials file exists
@@ -647,6 +831,9 @@ def main() -> int:
             print(f"✗ Credentials file not found: {CREDENTIALS_PATH}")
             print("  Please ensure the credentials file exists or set GOOGLE_APPLICATION_CREDENTIALS environment variable.")
             sys.exit(1)
+        
+        # Build query with target date
+        query = build_creatives_query(target_date)
         
         # Initialize clients
         print("Initializing clients...")
@@ -657,34 +844,36 @@ def main() -> int:
         # Ensure bucket exists
         ensure_bucket_exists(storage_client, GCS_BUCKET_NAME, BIGQUERY_LOCATION)
         
-        # Get today's date for filename and cleanup
+        # Get date string for filename and cleanup
+        date_timestamp = target_date.strftime('%Y%m%d')
         today_timestamp = datetime.utcnow().strftime('%Y%m%d')
-        today_blob_name = f"{GCS_FILE_PREFIX}{today_timestamp}.csv"
+        blob_name = f"{GCS_FILE_PREFIX}{date_timestamp}.csv"
         
         # Clean up old files from GCS (before checking/creating today's file)
-        print(f"\nCleaning up old files from GCS...")
-        print(f"  Looking for files with prefix: {GCS_FILE_PREFIX}")
-        cleanup_stats = cleanup_old_files_from_gcs(
-            storage_client,
-            GCS_BUCKET_NAME,
-            GCS_FILE_PREFIX,
-            today_timestamp
-        )
-        if cleanup_stats['errors']:
-            print(f"  ⚠ Warnings during cleanup: {len(cleanup_stats['errors'])} error(s)")
+        # COMMENTED OUT FOR NOW
+        # print(f"\nCleaning up old files from GCS...")
+        # print(f"  Looking for files with prefix: {GCS_FILE_PREFIX}")
+        # cleanup_stats = cleanup_old_files_from_gcs(
+        #     storage_client,
+        #     GCS_BUCKET_NAME,
+        #     GCS_FILE_PREFIX,
+        #     today_timestamp
+        # )
+        # if cleanup_stats['errors']:
+        #     print(f"  ⚠ Warnings during cleanup: {len(cleanup_stats['errors'])} error(s)")
         
-        print(f"\nChecking if file for today already exists in GCS...")
-        print(f"  Looking for: gs://{GCS_BUCKET_NAME}/{today_blob_name}")
+        print(f"\nChecking if file for target date already exists in GCS...")
+        print(f"  Looking for: gs://{GCS_BUCKET_NAME}/{blob_name}")
         
-        if check_file_exists_in_gcs(storage_client, GCS_BUCKET_NAME, today_blob_name):
-            print(f"✓ File for today already exists in GCS")
+        if check_file_exists_in_gcs(storage_client, GCS_BUCKET_NAME, blob_name):
+            print(f"✓ File for target date already exists in GCS")
             print(f"  Skipping BigQuery query and export, downloading existing file...")
             
             # Create a mock export_result for existing file
             export_result = {
                 'success': True,
-                'destination_uri': f"gs://{GCS_BUCKET_NAME}/{today_blob_name}",
-                'blob_name': today_blob_name,
+                'destination_uri': f"gs://{GCS_BUCKET_NAME}/{blob_name}",
+                'blob_name': blob_name,
                 'duration_seconds': 0.0,
                 'skipped_export': True
             }
@@ -695,9 +884,9 @@ def main() -> int:
             export_result = execute_query_and_export_to_gcs(
                 bq_client,
                 storage_client,
-                BIGQUERY_QUERY,
+                query,
                 GCS_BUCKET_NAME,
-                blob_name=today_blob_name  # Use today's date for filename
+                blob_name=blob_name  # Use target date for filename
             )
             
             if not export_result['success']:
@@ -715,10 +904,32 @@ def main() -> int:
             print(f"\n✗ Download failed: {download_result['error']}")
             sys.exit(1)
         
+        # Optional: Import into PostgreSQL creatives_fresh
+        if args.import_db:
+            print(f"\n{'='*80}")
+            print("PostgreSQL Import")
+            print(f"{'='*80}")
+            print(f"Normalizing CSV to two columns (creative_id, advertiser_id)...")
+            tmp_csv, read_rows, written_rows = normalize_source_to_two_columns(download_result['local_path'])
+            print(f"  Normalized rows: read={read_rows:,}, kept={written_rows:,}")
+
+            try:
+                print("Upserting into creatives_fresh (created_at = target date)...")
+                staged, upserted = upsert_from_normalized_csv(tmp_csv, target_date)
+                print(f"  Staged rows:   {staged:,}")
+                print(f"  Upserted rows: {upserted:,}")
+                print("✓ PostgreSQL import complete")
+            finally:
+                try:
+                    os.unlink(tmp_csv)
+                except Exception:
+                    pass
+
         # Summary
         print(f"\n{'='*80}")
         print("✓ Workflow Completed Successfully")
         print(f"{'='*80}")
+        print(f"Target Date:   {target_date}")
         print(f"Query Source:  bigquery-public-data.google_ads_transparency_center.creative_stats")
         print(f"GCS URI:       {export_result['destination_uri']}")
         print(f"Local File:    {download_result['local_path']}")
@@ -736,6 +947,11 @@ def main() -> int:
         print(f"  BigQuery Query: $0.00 (FREE for public datasets!)")
         print(f"  GCS Download:   $0.00 (same region)")
         print(f"  Total:          $0.00")
+        
+        # Note: PostgreSQL operations commented out for now
+        # TODO: Add PostgreSQL import functionality if needed in the future
+        # Example:
+        # import_csv_to_postgres(download_result['local_path'])
         
         return 0
         

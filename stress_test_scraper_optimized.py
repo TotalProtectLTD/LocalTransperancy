@@ -297,7 +297,7 @@ def get_pending_batch_and_mark_processing(batch_size: int = None) -> List[Dict[s
                 SELECT id, creative_id, advertiser_id
                 FROM creatives_fresh
                 WHERE status = 'pending'
-                ORDER BY created_at
+                ORDER BY created_at DESC
                 LIMIT %s
                 FOR UPDATE SKIP LOCKED
             )
