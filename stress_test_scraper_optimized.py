@@ -83,7 +83,8 @@ try:
     )
     from google_ads_api_analysis import (
         check_if_static_cached_creative,
-        extract_funded_by_from_api
+        extract_funded_by_from_api,
+        extract_country_presence_from_api
     )
     from google_ads_config import ENABLE_STEALTH_MODE
     from playwright.async_api import async_playwright
@@ -405,6 +406,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
         cursor = conn.cursor()
         
         if result.get('success'):
+            country_presence_json = json.dumps(result.get('country_presence')) if result.get('country_presence') else None
             cursor.execute("""
                 UPDATE creatives_fresh
                 SET status = 'completed',
@@ -412,6 +414,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                     video_ids = %s,
                     appstore_id = NULLIF(BTRIM(%s), ''),
                     funded_by = %s,
+                    country_presence = %s,
                     scraped_at = %s,
                     error_message = NULL
                 WHERE id = %s
@@ -420,6 +423,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                 json.dumps(result.get('videos', [])),
                 result.get('appstore_id'),
                 result.get('funded_by'),
+                country_presence_json,
                 datetime.utcnow(),
                 creative_id
             ))
@@ -969,6 +973,7 @@ async def scrape_batch_optimized(
                 # Extract data (same as scrape_ads_transparency_page)
                 static_content_info = check_if_static_cached_creative(tracker.api_responses, first_url)
                 funded_by = extract_funded_by_from_api(tracker.api_responses, first_url)
+                country_presence = extract_country_presence_from_api(tracker.api_responses, first_url)
                 
                 # Identify creative
                 creative_results = _identify_creative(tracker, first_url, static_content_info)
@@ -995,6 +1000,7 @@ async def scrape_batch_optimized(
                     'video_count': len(extraction_results['unique_videos']),
                     'appstore_id': extraction_results['app_store_id'],
                     'funded_by': funded_by,
+                    'country_presence': country_presence,
                     'real_creative_id': real_creative_id,
                     'duration_ms': (time.time() - start_time) * 1000,
                     'error': None,
@@ -1077,6 +1083,7 @@ async def scrape_batch_optimized(
                         'video_count': api_result.get('video_count', 0),
                         'appstore_id': api_result.get('app_store_id'),
                         'funded_by': api_result.get('funded_by'),
+                        'country_presence': api_result.get('country_presence'),
                         'real_creative_id': api_result.get('real_creative_id'),
                         'duration_ms': api_result.get('duration_ms', 0),
                         'error': '; '.join(api_result.get('errors', [])) if not api_result.get('success') else None,

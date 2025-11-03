@@ -23,6 +23,7 @@ in subsequent refactoring phases.
 
 import re
 import json
+from datetime import datetime
 import codecs
 from typing import List, Dict, Any, Optional, Set
 
@@ -527,5 +528,68 @@ def extract_funded_by_from_api(
         except (json.JSONDecodeError, KeyError, TypeError):
             continue
     
+    return None
+
+
+def extract_country_presence_from_api(
+    api_responses: List[Dict[str, Any]],
+    page_url: str
+) -> Optional[Dict[str, str]]:
+    """
+    Extract country presence map from GetCreativeById API response.
+
+    Parses field "17" as a list of objects; for each item uses:
+      - country_code: item['1'] (int)
+      - last_seen_raw: item['5'] (yyyymmdd int)
+    Returns a dict mapping str(country_code) -> ISO date string (YYYY-MM-DD).
+
+    Best-effort parsing: returns None if missing or on errors.
+    """
+    # Extract CR... from page URL
+    match = re.search(PATTERN_CREATIVE_ID_FROM_PAGE_URL, page_url)
+    if not match:
+        return None
+
+    page_creative_id = match.group(1)
+
+    for api_resp in api_responses:
+        if API_GET_CREATIVE_BY_ID not in api_resp.get('url', ''):
+            continue
+
+        try:
+            data = json.loads(api_resp.get('text', ''))
+            # Unwrap top-level if present
+            if isinstance(data, dict) and '1' in data and isinstance(data['1'], dict):
+                data = data['1']
+
+            # Ensure this response is for our creative
+            response_creative_id = data.get('2', '') if isinstance(data, dict) else ''
+            if response_creative_id != page_creative_id:
+                continue
+
+            items = data.get('17', []) if isinstance(data, dict) else []
+            if not isinstance(items, list) or not items:
+                continue
+
+            result: Dict[str, str] = {}
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                country_code = it.get('1')
+                raw_date = it.get('5')  # Always use field "5" as per requirement
+                if country_code is None or raw_date is None:
+                    continue
+                try:
+                    iso_date = datetime.strptime(str(raw_date), '%Y%m%d').date().isoformat()
+                    result[str(int(country_code))] = iso_date
+                except Exception:
+                    # Skip malformed entries
+                    continue
+
+            return result or None
+
+        except (json.JSONDecodeError, TypeError, KeyError):
+            continue
+
     return None
 

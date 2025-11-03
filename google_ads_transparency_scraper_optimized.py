@@ -297,7 +297,8 @@ from google_ads_content import (
 # API Analysis - Import API parsing functions
 from google_ads_api_analysis import (
     check_if_static_cached_creative,
-    extract_funded_by_from_api
+    extract_funded_by_from_api,
+    extract_country_presence_from_api
 )
 
 # Debug Utilities - Import debug file functions
@@ -583,6 +584,8 @@ async def scrape_ads_transparency_page(
     
     # Extract funded_by (sponsor company name) from API
     funded_by = extract_funded_by_from_api(tracker.api_responses, page_url)
+    # Extract country presence (best-effort)
+    country_presence = extract_country_presence_from_api(tracker.api_responses, page_url)
     
     # Extract data
     extraction_results = _extract_data(content_js_responses, found_fletch_renders, static_content_info, real_creative_id, debug_fletch, debug_appstore)
@@ -639,6 +642,8 @@ async def scrape_ads_transparency_page(
         
         # Funded By (sponsor company name)
         'funded_by': funded_by,
+        # Country presence (JSON map of country_code -> last_seen ISO date)
+        'country_presence': country_presence,
         
         # Traffic
         'incoming_bytes': incoming_bytes,
@@ -1145,6 +1150,8 @@ async def scrape_ads_transparency_api_only(
     
     # Extract funded_by from API
     funded_by = extract_funded_by_from_api(tracker.api_responses, page_url)
+    # Extract country presence (best-effort)
+    country_presence = extract_country_presence_from_api(tracker.api_responses, page_url)
     
     # Identify creative (from API or frequency)
     creative_results = _identify_creative(tracker, page_url, static_content_info)
@@ -1255,6 +1262,8 @@ async def scrape_ads_transparency_api_only(
         
         # Funded By
         'funded_by': funded_by,
+        # Country presence (JSON map of country_code -> last_seen ISO date)
+        'country_presence': country_presence,
         
         # Traffic (estimation only, no mitmproxy in API-only mode)
         'incoming_bytes': tracker.incoming_bytes,

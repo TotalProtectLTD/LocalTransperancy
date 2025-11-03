@@ -86,6 +86,7 @@ def create_tables():
             video_ids TEXT,
             appstore_id TEXT,
             funded_by TEXT DEFAULT NULL,
+            country_presence JSONB,
             sync BOOLEAN DEFAULT FALSE,
             scraped_at TIMESTAMP,
             error_message TEXT,
