@@ -19,6 +19,7 @@ import json
 import traceback
 from datetime import datetime
 from typing import Dict, Any, Optional
+from pathlib import Path
 
 try:
     import httpx
@@ -41,11 +42,15 @@ try:
 except ImportError:
     STEALTH_AVAILABLE = False
 
-# Proxy acquisition configuration
-PROXY_ACQUIRE_URL = "https://magictransparency.com/api/proxies/acquire?job=advertisers"
+# API configuration
+API_DOMAIN = "https://magictransparency.com"
+PROXY_ACQUIRE_URL = f"{API_DOMAIN}/api/proxies/acquire?job=advertisers"
 PROXY_ACQUIRE_SECRET = "ad2a58397cf97c8bdf5814a95e33b2c17490933d9255e3e10d55ed36a665449e"
 
 # legacy configuration removed
+
+# Advertiser acquisition configuration
+ADVERTISER_NEXT_URL = f"{API_DOMAIN}/api/advertisers/next-for-scraping"
 # legacy configuration removed
 
 
@@ -91,6 +96,26 @@ async def acquire_proxy_for_run() -> Optional[Dict[str, Any]]:
         return None
 
 
+async def acquire_next_advertiser() -> Optional[Dict[str, Any]]:
+    """
+    Acquire next advertiser to scrape from server.
+    Returns dict with keys: id, transparency_id, transparency_name, scraping_attempts
+    Returns None if acquisition fails or malformed.
+    """
+    headers = {"X-Incoming-Secret": PROXY_ACQUIRE_SECRET}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(ADVERTISER_NEXT_URL, headers=headers)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if not data or 'transparency_id' not in data:
+                return None
+            return data
+    except Exception:
+        return None
+
+
 # proxy and rotation logic removed
 
 
@@ -100,7 +125,7 @@ async def acquire_proxy_for_run() -> Optional[Dict[str, Any]]:
 # worker/dispatcher removed
 
 
-async def collect_advertiser_creatives(advertiser_id: str, region: str = "US") -> Dict[str, Any]:
+async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhere") -> Dict[str, Any]:
     """
     Single-task flow:
     1) Load advertiser page once to obtain cookies
@@ -111,7 +136,7 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "US") -
     import urllib.parse
     from google_ads_traffic import _get_user_agent
     
-    advertiser_url = f"https://adstransparency.google.com/advertiser/{advertiser_id}?region={region}"
+    advertiser_url = f"https://adstransparency.google.com/advertiser/{advertiser_id}?region={region}&platform=YOUTUBE"
     
     # Acquire proxy for this run
     proxy_info = await acquire_proxy_for_run()
@@ -139,6 +164,16 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "US") -
                 'sec-ch-ua-platform': '"Windows"'
             }
         )
+        
+        # Minimal blocking rules (images, fonts, stylesheets, media)
+        async def blocking_route(route):
+            req = route.request
+            if req.resource_type in ("image", "media", "font", "stylesheet"):
+                await route.abort()
+            else:
+                await route.continue_()
+        await context.route('**/*', blocking_route)
+
         page = await context.new_page()
         
         if STEALTH_AVAILABLE and ENABLE_STEALTH_MODE:
@@ -150,7 +185,9 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "US") -
         cookies = await context.cookies()
         await browser.close()
     
-    # Prepare SearchCreatives requests
+    # Prepare SearchCreatives single request
+    debug_path = Path("debug")
+    debug_path.mkdir(exist_ok=True)
     cookie_header = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
     custom_headers = {
         "accept": "*/*",
@@ -167,77 +204,74 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "US") -
     }
     api_url = "https://adstransparency.google.com/anji/_/rpc/SearchService/SearchCreatives?authuser="
     
-    # Date range: today only by default (yyyymmdd)
-    today_int = int(datetime.utcnow().strftime('%Y%m%d'))
-    
-    base_post_data = {
+    one_shot_body = {
         "2": 40,
         "3": {
             "4": 3,
-            "6": today_int,
-            "7": today_int,
             "12": {"1": "", "2": True},
             "13": {"1": [advertiser_id]},
             "14": [5]
         },
-        "7": {"1": 1, "2": 39, "3": 2268}
+        "7": {"1": 1, "2": 0, "3": 2268}
     }
+    post_data = "f.req=" + urllib.parse.quote(json.dumps(one_shot_body, separators=(',', ':')))
     
-    pagination_token: Optional[str] = None
-    page_num = 0
-    max_pages = 1000
-    total_creatives = 0
-    all_creative_ids: set[str] = set()
-    all_creative_id_numbers: set[str] = set()
-    all_content_js_urls: set[str] = set()
+    async with httpx.AsyncClient(timeout=30.0, proxy=proxy_info['http_proxy_url']) as client:
+        response = await client.post(api_url, headers=custom_headers, content=post_data)
+        # Save request headers and body
+        (debug_path / "searchcreatives_request_headers.json").write_text(
+            json.dumps({
+                "url": api_url,
+                "headers": custom_headers,
+                "body_json": one_shot_body,
+                "body_encoded": post_data
+            }, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        # Save response headers
+        (debug_path / "searchcreatives_response_headers.json").write_text(
+            json.dumps(dict(response.headers), indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        # Save raw response body
+        (debug_path / "searchcreatives_response_body.txt").write_bytes(response.content)
     
-    async with httpx.AsyncClient(timeout=30.0, proxies=proxy_info['httpx_proxies']) as client:
-        while page_num < max_pages:
-            page_num += 1
-            if pagination_token:
-                post_data_json = {**base_post_data, "4": pagination_token}
-            else:
-                post_data_json = base_post_data.copy()
-            post_data = "f.req=" + urllib.parse.quote(json.dumps(post_data_json, separators=(',', ':')))
-            response = await client.post(api_url, headers=custom_headers, content=post_data)
-            if response.status_code != 200:
-                break
-            try:
-                response_json = response.json()
-            except Exception:
-                break
-            creatives = response_json.get("1", [])
-            total_creatives += len(creatives)
-            for creative in creatives:
-                cr_id = creative.get("2", "")
-                if cr_id:
-                    all_creative_ids.add(cr_id)
-                try:
-                    url = creative.get("3", {}).get("1", {}).get("4", "")
-                    if url:
-                        all_content_js_urls.add(url)
-                        if "creativeId=" in url:
-                            from urllib.parse import urlparse, parse_qs
-                            parsed_url = urlparse(url)
-                            q = parse_qs(parsed_url.query)
-                            cid = q.get("creativeId", [""])[0]
-                            if cid:
-                                all_creative_id_numbers.add(cid)
-                except Exception:
-                    pass
-            pagination_token = response_json.get("2", "")
-            if not pagination_token:
-                break
+    # Extract objects "4" and "5" from response JSON and compute average as total_ads
+    total_ads = None
+    try:
+        resp_json = response.json()
+        val4 = resp_json.get("4")
+        val5 = resp_json.get("5")
+        if isinstance(val4, str) and val4.isdigit() and isinstance(val5, str) and val5.isdigit():
+            total_ads = (int(val4) + int(val5)) // 2
+    except Exception:
+        total_ads = None
     
     return {
         "advertiser_id": advertiser_id,
-        "pages": page_num,
-        "total_creatives": total_creatives,
-        "creative_ids": sorted(list(all_creative_ids)),
-        "creative_id_numbers": sorted(list(all_creative_id_numbers)),
-        "content_js_urls": sorted(list(all_content_js_urls)),
-        "cookies_count": len(cookies)
+        "cookies_count": len(cookies),
+        "ads_total": total_ads,
+        "debug_files": [
+            str((debug_path / "searchcreatives_request_headers.json").absolute()),
+            str((debug_path / "searchcreatives_response_headers.json").absolute()),
+            str((debug_path / "searchcreatives_response_body.txt").absolute())
+        ]
     }
+
+
+def update_ads_total(server_advertiser_id: int, ads_total: int) -> bool:
+    """PATCH ads_total to local API for the given server advertiser id."""
+    try:
+        url = f"{API_DOMAIN}/api/advertisers/{server_advertiser_id}"
+        headers = {
+            "X-Incoming-Secret": PROXY_ACQUIRE_SECRET,
+            "Content-Type": "application/json"
+        }
+        payload = {"ads_total": ads_total}
+        with httpx.Client(timeout=15.0) as client:
+            r = client.patch(url, headers=headers, json=payload)
+            return r.status_code >= 200 and r.status_code < 300
+    except Exception:
+        return False
 
 
 def main():
@@ -245,11 +279,34 @@ def main():
         description='Google Ads Transparency Center - Single Advertiser Collector',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('--advertiser-id', required=True, help='Advertiser ID (AR...) to collect creatives for')
+    parser.add_argument('--advertiser-id', required=False, help='Advertiser ID (AR...) to collect creatives for; if omitted, fetches from API')
     args = parser.parse_args()
     
     try:
-        result = asyncio.run(collect_advertiser_creatives(args.advertiser_id))
+        if args.advertiser_id:
+            advertiser_meta = None
+            advertiser_id = args.advertiser_id
+        else:
+            advertiser_meta = asyncio.run(acquire_next_advertiser())
+            if not advertiser_meta:
+                print(json.dumps({"status": "no_advertiser"}))
+                return
+            advertiser_id = advertiser_meta.get('transparency_id')
+            if not advertiser_id:
+                raise RuntimeError('API returned invalid advertiser payload (missing transparency_id)')
+        
+        result = asyncio.run(collect_advertiser_creatives(advertiser_id))
+        
+        # Attach server advertiser metadata if available
+        if advertiser_meta:
+            result['server_advertiser_id'] = advertiser_meta.get('id')
+            result['advertiser_name'] = advertiser_meta.get('transparency_name')
+            result['scraping_attempts'] = advertiser_meta.get('scraping_attempts')
+            # If ads_total computed, PATCH it to local API
+            if result.get('ads_total') is not None:
+                updated = update_ads_total(advertiser_meta.get('id'), int(result['ads_total']))
+                result['ads_total_updated'] = bool(updated)
+        
         print(json.dumps(result, ensure_ascii=False))
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")

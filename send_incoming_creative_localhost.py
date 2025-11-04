@@ -91,6 +91,7 @@ def claim_rows(limit: int) -> List[Dict[str, Any]]:
                   cf.appstore_id,
                   cf.video_ids,
                   cf.funded_by,
+                  cf.country_presence,
                   cf.scraped_at
     """
     with get_db_connection() as conn:
@@ -113,6 +114,7 @@ def select_rows_preview(limit: int) -> List[Dict[str, Any]]:
                cf.appstore_id,
                cf.video_ids,
                cf.funded_by,
+               cf.country_presence,
                cf.scraped_at
         FROM creatives_fresh cf
         LEFT JOIN advertisers a ON a.advertiser_id = cf.advertiser_id
@@ -187,12 +189,43 @@ def _parse_video_ids(raw: Optional[str]) -> List[str]:
         return []
 
 
+def _parse_countries(raw: Optional[Any]) -> Optional[Dict[str, str]]:
+    """Normalize country_presence JSONB to {str(country_code): iso_date}.
+
+    Accepts dict (already parsed), JSON string, or None. Ensures keys are str and
+    values are YYYY-MM-DD strings. Returns None if result is empty or invalid.
+    """
+    if raw is None:
+        return None
+    data: Any = raw
+    try:
+        if isinstance(raw, str):
+            data = json.loads(raw)
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    result: Dict[str, str] = {}
+    for k, v in data.items():
+        if v is None:
+            continue
+        key_str = str(k)
+        val_str = str(v)
+        if len(val_str) == 10:
+            result[key_str] = val_str
+
+    return result or None
+
+
 def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     creative_id: str = row.get('creative_id') or ''
     advertiser_id: str = row.get('advertiser_id') or ''
     advertiser_name: Optional[str] = row.get('advertiser_name')
     appstore_id: Optional[str] = row.get('appstore_id')
     funded_by: Optional[str] = row.get('funded_by')
+    country_presence: Optional[Any] = row.get('country_presence')
     scraped_at: Optional[datetime] = row.get('scraped_at')
     video_ids: List[str] = _parse_video_ids(row.get('video_ids'))
 
@@ -208,12 +241,18 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         "youtube_video_ids": video_ids,
     }
 
-    # Optional sponsor fields
+    # Optional sponsor field (new schema)
     if funded_by:
-        sponsor_name = funded_by.strip()
-        payload["sponsor_advertiser_name"] = sponsor_name
-        # Always send only sponsor name; do not attempt ID resolution
-        payload["sponsor_advertiser_id"] = None
+        sponsor_name_value = funded_by.strip()
+        if sponsor_name_value:
+            advertiser_name_value = (advertiser_name or "").strip()
+            if sponsor_name_value.lower() != advertiser_name_value.lower():
+                payload["sponsor_name"] = sponsor_name_value
+
+    # Optional countries field from country_presence (new schema)
+    countries = _parse_countries(country_presence)
+    if countries:
+        payload["countries"] = countries
 
     # Optional creative_date as YYYY-MM-DD
     if scraped_at:
