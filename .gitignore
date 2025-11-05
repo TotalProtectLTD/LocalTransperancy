@@ -70,6 +70,7 @@ gcs_exports/
 
 # Credentials and secrets (NEVER commit these)
 config/bigquery-credentials.json
+config/shared_secret.txt
 *.credentials.json
 *credentials*.json
 

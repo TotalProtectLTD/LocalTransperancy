@@ -597,14 +597,14 @@ def normalize_source_to_two_columns(source_csv_path: str) -> Tuple[str, int, int
         raise
 
 
-def upsert_from_normalized_csv(csv_path: str, target_date: date) -> Tuple[int, int]:
+def upsert_from_normalized_csv(csv_path: str, target_date: date) -> Tuple[int, int, int]:
     """
     Upsert creatives from a two-column CSV using staging + COPY.
 
     Sets created_at for both new rows and duplicates to the provided target_date
     (cast to timestamp at midnight).
 
-    Returns: (staged_rows, upserted_rows)
+    Returns: (staged_rows, new_rows, updated_rows)
     """
     created_at_literal = target_date.strftime('%Y-%m-%d')  # DATE literal, casts to timestamp
 
@@ -631,6 +631,18 @@ def upsert_from_normalized_csv(csv_path: str, target_date: date) -> Tuple[int, i
                 cur.execute("SELECT COUNT(*) FROM staging_daily_creatives;")
                 staged = cur.fetchone()[0]
 
+                # Check how many are new vs duplicates before upsert
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE cf.creative_id IS NULL) as new_count,
+                        COUNT(*) FILTER (WHERE cf.creative_id IS NOT NULL) as duplicate_count
+                    FROM staging_daily_creatives sdc
+                    LEFT JOIN creatives_fresh cf ON sdc.creative_id = cf.creative_id
+                """)
+                result = cur.fetchone()
+                new_count = result[0]
+                duplicate_count = result[1]
+
                 # Insert and upsert with created_at set to the import's target date
                 cur.execute(
                     """
@@ -644,9 +656,8 @@ def upsert_from_normalized_csv(csv_path: str, target_date: date) -> Tuple[int, i
                     """,
                     (created_at_literal,)
                 )
-                upserted = cur.rowcount
 
-        return staged, upserted
+        return staged, new_count, duplicate_count
     finally:
         conn.close()
 
@@ -778,21 +789,21 @@ def cleanup_old_files_from_gcs(
 def main() -> int:
     """Main execution function."""
     parser = argparse.ArgumentParser(
-        description='Export creatives from BigQuery to GCS, download, and optionally import to PostgreSQL',
+        description='Export creatives from BigQuery to GCS, download, and import to PostgreSQL',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Export creatives for today's date
+  # Export creatives for today's date (with import to PostgreSQL)
   %(prog)s
 
-  # Export creatives for a specific date
+  # Export creatives for a specific date (with import to PostgreSQL)
   %(prog)s --date 2025-11-01
 
-  # Export creatives for yesterday
+  # Export creatives for yesterday (with import to PostgreSQL)
   %(prog)s --date $(date -d yesterday +%%Y-%%m-%%d)
 
-  # Export and import into PostgreSQL (created_at set to target date)
-  %(prog)s --date 2025-10-31 --import-db
+  # Export without importing to PostgreSQL
+  %(prog)s --date 2025-10-31 --skip-import-db
         """
     )
     
@@ -803,9 +814,9 @@ Examples:
         default=None
     )
     parser.add_argument(
-        '--import-db',
+        '--skip-import-db',
         action='store_true',
-        help='After download, import CSV into PostgreSQL creatives_fresh using staging + COPY + upsert'
+        help='Skip importing CSV into PostgreSQL (import is enabled by default)'
     )
     
     args = parser.parse_args()
@@ -904,8 +915,8 @@ Examples:
             print(f"\n✗ Download failed: {download_result['error']}")
             sys.exit(1)
         
-        # Optional: Import into PostgreSQL creatives_fresh
-        if args.import_db:
+        # Import into PostgreSQL creatives_fresh (default behavior, unless --skip-import-db is set)
+        if not args.skip_import_db:
             print(f"\n{'='*80}")
             print("PostgreSQL Import")
             print(f"{'='*80}")
@@ -915,15 +926,19 @@ Examples:
 
             try:
                 print("Upserting into creatives_fresh (created_at = target date)...")
-                staged, upserted = upsert_from_normalized_csv(tmp_csv, target_date)
+                staged, new_rows, updated_rows = upsert_from_normalized_csv(tmp_csv, target_date)
                 print(f"  Staged rows:   {staged:,}")
-                print(f"  Upserted rows: {upserted:,}")
+                print(f"  New rows:      {new_rows:,}")
+                print(f"  Duplicates:    {updated_rows:,} (updated)")
+                print(f"  Total upserted: {new_rows + updated_rows:,}")
                 print("✓ PostgreSQL import complete")
             finally:
                 try:
                     os.unlink(tmp_csv)
                 except Exception:
                     pass
+        else:
+            print(f"\n⚠ Skipping PostgreSQL import (--skip-import-db flag set)")
 
         # Summary
         print(f"\n{'='*80}")
@@ -947,11 +962,6 @@ Examples:
         print(f"  BigQuery Query: $0.00 (FREE for public datasets!)")
         print(f"  GCS Download:   $0.00 (same region)")
         print(f"  Total:          $0.00")
-        
-        # Note: PostgreSQL operations commented out for now
-        # TODO: Add PostgreSQL import functionality if needed in the future
-        # Example:
-        # import_csv_to_postgres(download_result['local_path'])
         
         return 0
         

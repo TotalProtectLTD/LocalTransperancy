@@ -22,7 +22,8 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -37,6 +38,21 @@ from psycopg2.extras import RealDictCursor
 
 API_BASE_URL = "https://magictransparency.com"
 API_ENDPOINT = f"{API_BASE_URL}/api/new-creative"
+
+# Path to shared secret config file
+SECRET_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "shared_secret.txt")
+
+def load_secret_from_file() -> Optional[str]:
+    """Load shared secret from config file if it exists."""
+    try:
+        if os.path.exists(SECRET_CONFIG_PATH):
+            with open(SECRET_CONFIG_PATH, 'r') as f:
+                secret = f.read().strip()
+                if secret:
+                    return secret
+    except Exception:
+        pass
+    return None
 
 # Reuse local DB config style for consistency with other project scripts
 DB_CONFIG = {
@@ -89,6 +105,7 @@ def claim_rows(limit: int) -> List[Dict[str, Any]]:
                   cf.video_ids,
                   cf.funded_by,
                   cf.country_presence,
+                  cf.created_at,
                   cf.scraped_at
     """
     with get_db_connection() as conn:
@@ -112,6 +129,7 @@ def select_rows_preview(limit: int) -> List[Dict[str, Any]]:
                cf.video_ids,
                cf.funded_by,
                cf.country_presence,
+               cf.created_at,
                cf.scraped_at
         FROM creatives_fresh cf
         LEFT JOIN advertisers a ON a.advertiser_id = cf.advertiser_id
@@ -224,6 +242,7 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     appstore_id: Optional[str] = row.get('appstore_id')
     funded_by: Optional[str] = row.get('funded_by')
     country_presence: Optional[Any] = row.get('country_presence')
+    created_at: Optional[datetime] = row.get('created_at')
     scraped_at: Optional[datetime] = row.get('scraped_at')
     video_ids: List[str] = _parse_video_ids(row.get('video_ids'))
 
@@ -253,8 +272,19 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     if countries:
         payload["countries"] = countries
 
-    # Optional creative_date as YYYY-MM-DD
-    if scraped_at:
+    # Optional creative_date as YYYY-MM-DD (from created_at with a 2-day rule)
+    # Rule: if created_at + 2 days > current UTC time, use today's UTC date; else use created_at's date.
+    if created_at:
+        try:
+            now_utc = datetime.utcnow()
+            if created_at + timedelta(days=2) > now_utc:
+                payload["creative_date"] = now_utc.date().isoformat()
+            else:
+                payload["creative_date"] = created_at.date().isoformat()
+        except Exception:
+            pass
+    elif scraped_at:
+        # Fallback to previous behavior only if created_at is missing
         try:
             payload["creative_date"] = scraped_at.date().isoformat()
         except Exception:
@@ -267,19 +297,50 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
 # HTTP Sender
 # ----------------------------------------------------------------------------
 
-def send_payload(payload: Dict[str, Any], secret: str, timeout: float = 20.0) -> Tuple[bool, int, Dict[str, Any]]:
+def send_payload(payload: Dict[str, Any], secret: str, client: httpx.Client) -> Tuple[bool, int, Dict[str, Any]]:
+    """Send payload using a shared HTTP client for connection reuse."""
     headers = {
         "Content-Type": "application/json",
         "X-Incoming-Secret": secret,
     }
-    with httpx.Client(timeout=timeout) as client:
-        resp = client.post(API_ENDPOINT, json=payload, headers=headers)
-        try:
-            data = resp.json()
-        except Exception:
-            data = {"raw": resp.text}
-        success = resp.status_code in (200, 201)
-        return success, resp.status_code, data
+    resp = client.post(API_ENDPOINT, json=payload, headers=headers)
+    try:
+        data = resp.json()
+    except Exception:
+        data = {"raw": resp.text}
+    success = resp.status_code in (200, 201)
+    return success, resp.status_code, data
+
+
+def process_single_row(row: Dict[str, Any], secret: str, client: httpx.Client, skip_empty_videos: bool) -> Tuple[int, bool, Optional[str]]:
+    """Process a single row and return (row_id, success, error_message)."""
+    row_id = row["id"]
+    payload = build_payload(row)
+    
+    if skip_empty_videos and not payload.get("youtube_video_ids"):
+        return (row_id, False, "Skipped: empty youtube_video_ids")
+    
+    try:
+        ok, status_code, data = send_payload(payload, secret, client)
+        if ok:
+            mark_synced(row_id)
+            msg = data.get("message") if isinstance(data, dict) else None
+            return (row_id, True, None)
+        else:
+            detail: Optional[str] = None
+            if isinstance(data, dict):
+                detail = data.get("detail") or data.get("message") or json.dumps(data)[:200]
+            error_msg = f"HTTP {status_code}: {detail or 'Unknown error'}"
+            mark_sync_failed(row_id, error_msg)
+            return (row_id, False, error_msg)
+    except httpx.RequestError as e:
+        error_msg = f"Network error: {type(e).__name__}: {str(e)}"
+        mark_sync_failed(row_id, error_msg)
+        return (row_id, False, error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
+        mark_sync_failed(row_id, error_msg)
+        return (row_id, False, error_msg)
 
 
 # ----------------------------------------------------------------------------
@@ -292,14 +353,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--secret", type=str, help="Shared secret override (else INCOMING_SHARED_SECRET env)")
     parser.add_argument("--dry-run", action="store_true", help="Preview rows and payloads without DB/network side-effects")
     parser.add_argument("--skip-empty-videos", action="store_true", help="Skip rows with empty youtube_video_ids []")
+    parser.add_argument("--concurrency", type=int, default=10, help="Number of concurrent requests (default: 10)")
+    parser.add_argument("--timeout", type=float, default=10.0, help="Request timeout in seconds (default: 10.0)")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    secret = args.secret or os.environ.get("INCOMING_SHARED_SECRET")
+    secret = args.secret or os.environ.get("INCOMING_SHARED_SECRET") or load_secret_from_file()
     if not secret and not args.dry_run:
-        print("❌ Missing shared secret: set INCOMING_SHARED_SECRET or use --secret")
+        print("❌ Missing shared secret: set INCOMING_SHARED_SECRET, use --secret, or ensure config/shared_secret.txt exists")
         return 2
 
     if args.dry_run:
@@ -314,52 +377,46 @@ def main() -> int:
     total = len(rows)
     print(f"Found {total} row(s) to process")
 
-    successes = 0
-    failures = 0
-
-    for r in rows:
-        row_id = r["id"]
-        payload = build_payload(r)
-
-        if args.skip_empty_videos and not payload.get("youtube_video_ids"):
-            print(f"- Skip id={row_id} (empty videos)")
-            if not args.dry_run:
-                mark_sync_failed(row_id, "Skipped: empty youtube_video_ids")
-            continue
-
-        if args.dry_run:
+    if args.dry_run:
+        for r in rows:
+            row_id = r["id"]
+            payload = build_payload(r)
             print(f"[DRY-RUN] id={row_id} creative={payload.get('transparency_creative_id')} payload=")
             print(json.dumps(payload, ensure_ascii=False))
-            continue
-
-        try:
-            ok, status_code, data = send_payload(payload, secret)
-            if ok:
-                # Success or Duplicate (idempotent)
-                mark_synced(row_id)
-                successes += 1
-                msg = data.get("message") if isinstance(data, dict) else None
-                print(f"- ✓ id={row_id} HTTP {status_code} -> synced" + (f" ({msg})" if msg else ""))
-            else:
-                # Capture error details
-                detail: Optional[str] = None
-                if isinstance(data, dict):
-                    detail = data.get("detail") or data.get("message") or json.dumps(data)[:200]
-                mark_sync_failed(row_id, f"HTTP {status_code}: {detail or 'Unknown error'}")
-                failures += 1
-                print(f"- ✗ id={row_id} HTTP {status_code} -> sync_failed")
-        except httpx.RequestError as e:
-            mark_sync_failed(row_id, f"Network error: {type(e).__name__}: {str(e)}")
-            failures += 1
-            print(f"- ✗ id={row_id} network error -> sync_failed")
-        except Exception as e:
-            mark_sync_failed(row_id, f"Unexpected error: {type(e).__name__}: {str(e)}")
-            failures += 1
-            print(f"- ✗ id={row_id} unexpected error -> sync_failed")
-
-    if not args.dry_run:
-        print(f"Done. Success: {successes}, Failed: {failures}")
     else:
+        successes = 0
+        failures = 0
+        
+        # Create a single HTTP client for connection reuse
+        with httpx.Client(timeout=args.timeout) as client:
+            # Use ThreadPoolExecutor for concurrent requests
+            with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+                # Submit all tasks
+                futures = {
+                    executor.submit(process_single_row, r, secret, client, args.skip_empty_videos): r
+                    for r in rows
+                }
+                
+                # Process results as they complete
+                for future in as_completed(futures):
+                    try:
+                        row_id, success, error_msg = future.result()
+                        if success:
+                            successes += 1
+                            print(f"- ✓ id={row_id} -> synced")
+                        else:
+                            failures += 1
+                            if error_msg and "Skipped" in error_msg:
+                                print(f"- Skip id={row_id} ({error_msg})")
+                            else:
+                                print(f"- ✗ id={row_id} -> sync_failed ({error_msg[:100] if error_msg else 'Unknown'})")
+                    except Exception as e:
+                        failures += 1
+                        print(f"- ✗ Error processing row: {e}")
+        
+        print(f"Done. Success: {successes}, Failed: {failures}")
+    
+    if args.dry_run:
         print(f"[DRY-RUN] Previewed {total} row(s)")
 
     # Non-zero exit if any failures (when not dry-run)

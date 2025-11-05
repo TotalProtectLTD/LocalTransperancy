@@ -22,7 +22,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -92,6 +92,7 @@ def claim_rows(limit: int) -> List[Dict[str, Any]]:
                   cf.video_ids,
                   cf.funded_by,
                   cf.country_presence,
+                  cf.created_at,
                   cf.scraped_at
     """
     with get_db_connection() as conn:
@@ -115,6 +116,7 @@ def select_rows_preview(limit: int) -> List[Dict[str, Any]]:
                cf.video_ids,
                cf.funded_by,
                cf.country_presence,
+               cf.created_at,
                cf.scraped_at
         FROM creatives_fresh cf
         LEFT JOIN advertisers a ON a.advertiser_id = cf.advertiser_id
@@ -226,6 +228,7 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     appstore_id: Optional[str] = row.get('appstore_id')
     funded_by: Optional[str] = row.get('funded_by')
     country_presence: Optional[Any] = row.get('country_presence')
+    created_at: Optional[datetime] = row.get('created_at')
     scraped_at: Optional[datetime] = row.get('scraped_at')
     video_ids: List[str] = _parse_video_ids(row.get('video_ids'))
 
@@ -254,8 +257,19 @@ def build_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     if countries:
         payload["countries"] = countries
 
-    # Optional creative_date as YYYY-MM-DD
-    if scraped_at:
+    # Optional creative_date as YYYY-MM-DD (from created_at with a 2-day rule)
+    # Rule: if created_at + 2 days > current UTC time, use today's UTC date; else use created_at's date.
+    if created_at:
+        try:
+            now_utc = datetime.utcnow()
+            if created_at + timedelta(days=2) > now_utc:
+                payload["creative_date"] = now_utc.date().isoformat()
+            else:
+                payload["creative_date"] = created_at.date().isoformat()
+        except Exception:
+            pass
+    elif scraped_at:
+        # Fallback to previous behavior only if created_at is missing
         try:
             payload["creative_date"] = scraped_at.date().isoformat()
         except Exception:
