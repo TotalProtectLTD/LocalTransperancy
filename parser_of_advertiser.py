@@ -240,7 +240,7 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhe
             await Stealth().apply_stealth_async(page)
         
         # Navigate once to capture cookies
-        _log("INFO", "Visiting HTML for cookies")
+        _log("INFO", "Visiting HTML for cookies", advertiser_id=advertiser_id)
         await page.goto(advertiser_url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(5)
         cookies = await context.cookies()
@@ -605,10 +605,26 @@ def post_scraping_status(server_advertiser_id: int, status: str, ads_daily: Opti
             payload["ads_daily"] = ads_daily
         if error:
             payload["error"] = error[:500]
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            # Use PATCH for status updates
+            resp = client.patch(url, headers=headers, json=payload)
+            if resp.status_code == 405 and not url.endswith('/'):
+                # Common DRF pattern: requires trailing slash
+                url_slash = url + '/'
+                resp = client.patch(url_slash, headers=headers, json=payload)
             ok = 200 <= resp.status_code < 300
-            _log("INFO", "Post status", ok=ok, status_code=resp.status_code, status=status)
+            # Log extra diagnostics on failure
+            if not ok:
+                allow = resp.headers.get('allow')
+                location = resp.headers.get('location')
+                history_statuses = [r.status_code for r in getattr(resp, 'history', [])] or None
+                try:
+                    body_preview = resp.text[:200]
+                except Exception:
+                    body_preview = None
+                _log("ERROR", "Patch status failed", status_code=resp.status_code, allow=allow, location=location, history=history_statuses, body_preview=body_preview)
+            else:
+                _log("INFO", "Patch status", ok=ok, status_code=resp.status_code, status=status)
             return ok
     except Exception:
         return False
