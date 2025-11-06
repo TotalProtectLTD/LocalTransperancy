@@ -1,0 +1,8 @@
+# LocalTransperancy Scheduled Jobs
+# Generated: Thu Nov  6 15:47:17 +04 2025
+
+# Run bigquery_advertisers_postgres.py daily at 2:00 AM
+0 2 * * * cd /Users/rostoni/Downloads/LocalTransperancy && /usr/bin/python3 bigquery_advertisers_postgres.py >> /Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/bigquery-advertisers.log 2>> /Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/bigquery-advertisers-error.log
+
+# Run send_incoming_creative.py every 10 minutes
+*/10 * * * * cd /Users/rostoni/Downloads/LocalTransperancy && /usr/bin/python3 send_incoming_creative.py --limit 10 >> /Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/send-creatives.log 2>> /Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/send-creatives-error.log

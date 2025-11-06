@@ -33,3 +33,5 @@ echo
 echo "Note: launchd automatically rotates logs when they reach ~1MB"
 echo "      This script removes old rotated/archived logs"
 
+
+

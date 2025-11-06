@@ -44,3 +44,5 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Full log: $LOG_FILE"
 echo "Error log: $ERROR_LOG"
 
+
+
