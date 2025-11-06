@@ -123,34 +123,10 @@ PROXIES = [
         "password": "l0n7LLeQiA"
     },
     {
-        "host": "hub-us-8.litport.net",
-        "port": 31337,  # HTTPS port
-        "username": "cVlcv0AB",
-        "password": "867hnC5x8d"
-    },
-    {
-        "host": "hub-us-8.litport.net",
-        "port": 31337,  # HTTPS port
-        "username": "pGz76T35",
-        "password": "mo43glLtIBV"
-    },
-    {
-        "host": "hub-us-8.litport.net",
-        "port": 31337,  # HTTPS port
-        "username": "U62PUg",
-        "password": "6RJqlSRS30f"
-    },
-    {
-        "host": "hub-us-8.litport.net",
-        "port": 31337,  # HTTPS port
-        "username": "3j7Uzah",
-        "password": "4kUYVNQ0RJ"
-    },
-    {
         "host": "hub-us-10.litport.net",
         "port": 31337,  # HTTPS port
-        "username": "1YAXY4",
-        "password": "GuLy3fvu6d"
+        "username": "830PP0cW",
+        "password": "7RLEXT94wEb"
     }
     # Add more proxies here as needed
     # {

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.localtransparency.send-creatives</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/rostoni/bin/run-send-creatives.sh</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/rostoni/Downloads/LocalTransperancy</string>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/send-creatives.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/send-creatives-error.log</string>
+    
+    <key>StartInterval</key>
+    <integer>600</integer>
+    
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+

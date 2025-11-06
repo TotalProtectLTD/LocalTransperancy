@@ -11,7 +11,7 @@ On error, the row is marked as sync_failed with an error message.
 
 CLI flags:
   --limit N              Number of rows to send (default: 1)
-  --secret SECRET        Override INCOMING_SHARED_SECRET env var
+  --secret SECRET        Override INCOMING_SHARED_SECRET constant
   --dry-run              Do not modify DB or call network; just print payloads
   --skip-empty-videos    Skip rows with empty youtube_video_ids
 """
@@ -38,6 +38,9 @@ from psycopg2.extras import RealDictCursor
 
 API_BASE_URL = "https://magictransparency.com"
 API_ENDPOINT = f"{API_BASE_URL}/api/new-creative"
+
+# Default shared secret (can be overridden by env var or --secret flag)
+INCOMING_SHARED_SECRET = "ad2a58397cf97c8bdf5814a95e33b2c17490933d9255e3e10d55ed36a665449e"
 
 # Path to shared secret config file
 SECRET_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "shared_secret.txt")
@@ -350,7 +353,7 @@ def process_single_row(row: Dict[str, Any], secret: str, client: httpx.Client, s
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send new creatives to admin API")
     parser.add_argument("--limit", type=int, default=1, help="Number of rows to send (default: 1)")
-    parser.add_argument("--secret", type=str, help="Shared secret override (else INCOMING_SHARED_SECRET env)")
+    parser.add_argument("--secret", type=str, help="Shared secret override (else INCOMING_SHARED_SECRET constant)")
     parser.add_argument("--dry-run", action="store_true", help="Preview rows and payloads without DB/network side-effects")
     parser.add_argument("--skip-empty-videos", action="store_true", help="Skip rows with empty youtube_video_ids []")
     parser.add_argument("--concurrency", type=int, default=10, help="Number of concurrent requests (default: 10)")
@@ -360,10 +363,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    secret = args.secret or os.environ.get("INCOMING_SHARED_SECRET") or load_secret_from_file()
-    if not secret and not args.dry_run:
-        print("❌ Missing shared secret: set INCOMING_SHARED_SECRET, use --secret, or ensure config/shared_secret.txt exists")
-        return 2
+    # Always use INCOMING_SHARED_SECRET constant, but allow override via --secret flag
+    secret = args.secret or INCOMING_SHARED_SECRET
 
     if args.dry_run:
         rows = select_rows_preview(args.limit)
