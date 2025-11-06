@@ -264,7 +264,8 @@ from google_ads_config import (
     PROXY_RESULTS_PATH,
     EXIT_CODE_VALIDATION_FAILED,
     EXIT_CODE_ERROR,
-    JSON_OUTPUT_INDENT
+    JSON_OUTPUT_INDENT,
+    VERBOSE_LOGGING
 )
 
 # Cache Integration - Import cache-aware route handler and statistics
@@ -741,8 +742,8 @@ async def scrape_ads_transparency_api_only(
         - Savings: ~345 KB (65% reduction)
     """
     # Delay Configuration (to avoid rate limiting)
-    DELAY_BEFORE_API_CALL = (1.0, 3.0)      # Random delay before GetCreativeById API (min, max seconds)
-    DELAY_BETWEEN_CONTENTJS = (1.0, 3.0)    # Random delay between content.js fetches (min, max seconds)
+    DELAY_BEFORE_API_CALL = (0.5, 1.5)      # Random delay before GetCreativeById API (min, max seconds)
+    DELAY_BETWEEN_CONTENTJS = (0.5, 1)    # Random delay between content.js fetches (min, max seconds)
     
     start_time = time.time()
     page_url = f"https://adstransparency.google.com/advertiser/{advertiser_id}/creative/{creative_id}"
@@ -751,9 +752,10 @@ async def scrape_ads_transparency_api_only(
     await page.context.add_cookies(cookies)
     
     # DEBUG: Log cookies being added
-    print(f"  🍪 Adding {len(cookies)} cookies to context:")
-    for cookie in cookies[:3]:  # Show first 3
-        print(f"     - {cookie['name']}: {cookie['value'][:30]}...")
+    if VERBOSE_LOGGING:
+        print(f"  🍪 Adding {len(cookies)} cookies to context:")
+        for cookie in cookies[:3]:  # Show first 3
+            print(f"     - {cookie['name']}: {cookie['value'][:30]}...")
     
     # ========================================================================
     # STEP 1: Make GetCreativeById API Request
@@ -782,11 +784,13 @@ async def scrape_ads_transparency_api_only(
     
     # Add random delay before API call to avoid rate limiting
     random_delay = random.uniform(DELAY_BEFORE_API_CALL[0], DELAY_BEFORE_API_CALL[1])
-    print(f"  ⏳ Waiting {random_delay:.2f}s before API call...")
+    if VERBOSE_LOGGING:
+        print(f"  ⏳ Waiting {random_delay:.2f}s before API call...")
     await asyncio.sleep(random_delay)
     
-    print(f"  📤 Making API request to: {api_url[:80]}...")
-    print(f"     Headers: {list(request_headers.keys())}")
+    if VERBOSE_LOGGING:
+        print(f"  📤 Making API request to: {api_url[:80]}...")
+        print(f"     Headers: {list(request_headers.keys())}")
     
     # Retry logic for 429 rate limits
     max_retries = 3
@@ -803,9 +807,10 @@ async def scrape_ads_transparency_api_only(
             )
             
             # DEBUG: Log response info
-            print(f"  📥 API response received:")
-            print(f"     Status: {api_response.status}")
-            print(f"     Headers: {dict(list(api_response.headers.items())[:5])}")
+            if VERBOSE_LOGGING:
+                print(f"  📥 API response received:")
+                print(f"     Status: {api_response.status}")
+                print(f"     Headers: {dict(list(api_response.headers.items())[:5])}")
             
             # If we got a 429, retry with delay
             if api_response.status == 429:
@@ -1034,10 +1039,11 @@ async def scrape_ads_transparency_api_only(
                 }
     
     # Fetch all content.js files SEQUENTIALLY with random delays (1-3 seconds) to avoid rate limiting
-    print(f"  📤 Fetching {len(content_js_urls)} content.js file(s) {proxy_label}...")
-    if use_partial_proxy:
-        print(f"     Using direct connection (bypassing proxy)")
-    print(f"     Request headers: accept-encoding: gzip, deflate, br")
+    if VERBOSE_LOGGING:
+        print(f"  📤 Fetching {len(content_js_urls)} content.js file(s) {proxy_label}...")
+        if use_partial_proxy:
+            print(f"     Using direct connection (bypassing proxy)")
+        print(f"     Request headers: accept-encoding: gzip, deflate, br")
     fetch_start_time = time.time()
     
     # Fetch sequentially with random delays to avoid rate limiting
@@ -1046,7 +1052,8 @@ async def scrape_ads_transparency_api_only(
         # Add random delay between fetches (except for the first one)
         if i > 1:
             random_delay = random.uniform(DELAY_BETWEEN_CONTENTJS[0], DELAY_BETWEEN_CONTENTJS[1])
-            print(f"  ⏳ Waiting {random_delay:.2f}s before next content.js fetch...")
+            if VERBOSE_LOGGING:
+                print(f"  ⏳ Waiting {random_delay:.2f}s before next content.js fetch...")
             await asyncio.sleep(random_delay)
         
         # Fetch this content.js file
@@ -1054,7 +1061,8 @@ async def scrape_ads_transparency_api_only(
         fetch_results.append(result)
     
     fetch_duration = time.time() - fetch_start_time
-    print(f"  ✅ Fetched {len(content_js_urls)} file(s) in {fetch_duration:.2f}s (sequential with random delays)")
+    if VERBOSE_LOGGING:
+        print(f"  ✅ Fetched {len(content_js_urls)} file(s) in {fetch_duration:.2f}s (sequential with random delays)")
     
     # Process results and build content_js_responses
     content_js_responses = []
@@ -1079,8 +1087,9 @@ async def scrape_ads_transparency_api_only(
                 size_info = f"{compressed:,} bytes"
             
             # Log individual file details
-            print(f"  ✓ File {result['index']}/{len(content_js_urls)}: {size_info} "
-                  f"(video_id: {result['has_video_id']}, appstore: {result['has_appstore']}, encoding: {content_encoding})")
+            if VERBOSE_LOGGING:
+                print(f"  ✓ File {result['index']}/{len(content_js_urls)}: {size_info} "
+                      f"(video_id: {result['has_video_id']}, appstore: {result['has_appstore']}, encoding: {content_encoding})")
             
             # DEBUG: Save first content.js for inspection (only if debug_content enabled)
             if result['index'] == 1 and debug_content:
@@ -1116,7 +1125,8 @@ async def scrape_ads_transparency_api_only(
         else:
             print(f"  ⚠️  Failed to fetch file {result['index']}: {result['url'][:80]}... - {result['error']}")
     
-    print(f"  📊 Total downloaded: {total_bytes:,} bytes ({total_bytes/1024:.1f} KB) from {success_count}/{len(content_js_urls)} files")
+    if VERBOSE_LOGGING:
+        print(f"  📊 Total downloaded: {total_bytes:,} bytes ({total_bytes/1024:.1f} KB) from {success_count}/{len(content_js_urls)} files")
     
     # Check if ALL content.js fetches failed (network issue - should be retried)
     if content_js_urls and success_count == 0:

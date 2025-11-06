@@ -54,7 +54,8 @@ from google_ads_config import (
     XHR_DETECTION_THRESHOLD,
     SEARCH_CREATIVES_WAIT,
     API_SEARCH_CREATIVES,
-    PATTERN_FLETCH_RENDER_ID
+    PATTERN_FLETCH_RENDER_ID,
+    VERBOSE_LOGGING
 )
 
 # Import API analysis functions
@@ -142,8 +143,9 @@ async def _smart_wait_for_content(
         5. Maximum wait time: MAX_CONTENT_WAIT seconds (default 60s)
         6. Check interval: CONTENT_CHECK_INTERVAL seconds (default 0.5s)
     """
-    print("Waiting for dynamic content...")
-    sys.stdout.flush()  # Force immediate output in concurrent environments
+    if VERBOSE_LOGGING:
+        print("Waiting for dynamic content...")
+        sys.stdout.flush()  # Force immediate output in concurrent environments
     
     # Initialize state variables
     max_wait = MAX_CONTENT_WAIT
@@ -163,8 +165,9 @@ async def _smart_wait_for_content(
         # If JavaScript isn't executing, API responses won't arrive
         # Exit early to avoid full 60s timeout
         if elapsed >= XHR_DETECTION_THRESHOLD and len(all_xhr_fetch_requests) == 0:
-            print(f"  ⚠️  No XHR/fetch requests detected after {elapsed:.1f}s")
-            print(f"  ⚠️  JavaScript may not be executing - exiting wait early")
+            if VERBOSE_LOGGING:
+                print(f"  ⚠️  No XHR/fetch requests detected after {elapsed:.1f}s")
+                print(f"  ⚠️  JavaScript may not be executing - exiting wait early")
             break
         
         # Early exit condition 2: Empty GetCreativeById detection
@@ -220,12 +223,13 @@ async def _smart_wait_for_content(
             # If detected, exit immediately (no need to wait for content.js)
             static_check = check_if_static_cached_creative(tracker.api_responses, page_url)
             if static_check:
-                print(f"\n✅ Static/cached content detected in API response!")
-                content_type = static_check.get('content_type', 'unknown')
-                ad_type = 'image' if content_type == 'image' else 'HTML text' if content_type == 'html' else 'cached'
-                print(f"   Type: {ad_type} ad")
-                print(f"   Creative ID: {static_check['creative_id']}")
-                print(f"   No dynamic content.js needed - exiting wait early")
+                if VERBOSE_LOGGING:
+                    print(f"\n✅ Static/cached content detected in API response!")
+                    content_type = static_check.get('content_type', 'unknown')
+                    ad_type = 'image' if content_type == 'image' else 'HTML text' if content_type == 'html' else 'cached'
+                    print(f"   Type: {ad_type} ad")
+                    print(f"   Creative ID: {static_check['creative_id']}")
+                    print(f"   No dynamic content.js needed - exiting wait early")
                 static_content_detected = static_check
                 break
             

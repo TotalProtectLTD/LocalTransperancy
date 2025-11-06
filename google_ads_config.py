@@ -136,6 +136,9 @@ EXIT_CODE_VALIDATION_FAILED = 2  # exit code when scraping validation fails
 EXIT_CODE_ERROR = 1  # exit code for general errors
 MAX_XHR_DISPLAY_COUNT = 5  # maximum number of XHR requests to display in diagnostics
 
+# Logging configuration
+VERBOSE_LOGGING = True  # Set to False to suppress detailed logs from external modules
+
 # ============================================================================
 # END OF CONFIGURATION
 # ============================================================================

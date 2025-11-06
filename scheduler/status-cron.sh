@@ -47,13 +47,13 @@ if [ -f "$LOGS_DIR/bigquery-advertisers.log" ]; then
         echo "🕐 bigquery-advertisers last run: $LAST_RUN"
     fi
 else
-    echo "ℹ️  bigquery-advertisers: No log file yet (runs daily at 2 AM)"
+    echo "ℹ️  bigquery-advertisers: No log file yet (runs daily at 11 PM)"
 fi
 
 echo
 echo "Next scheduled runs:"
-echo "  - send-creatives: Every 10 minutes"
-echo "  - bigquery-advertisers: Daily at 2:00 AM"
+echo "  - send-creatives: Every 2 minutes (limit 15)"
+echo "  - bigquery-advertisers: Daily at 11:00 PM"
 echo
 echo "View logs:"
 echo "  tail -f $LOGS_DIR/send-creatives.log"

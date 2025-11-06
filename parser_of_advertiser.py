@@ -279,7 +279,7 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhe
     }
     post_data = "f.req=" + urllib.parse.quote(json.dumps(one_shot_body, separators=(',', ':')))
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, proxies=proxy_info['httpx_proxies']) as client:
         # Retry first call
         response = None
         backoffs = [1, 2]
@@ -357,7 +357,7 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhe
                 "7": {"1": 1, "2": 39, "3": 2268}
             }
             paginated_post = "f.req=" + urllib.parse.quote(json.dumps(paginated_body, separators=(',', ':')))
-            async with httpx.AsyncClient(timeout=30.0) as _c:
+            async with httpx.AsyncClient(timeout=30.0, proxies=proxy_info['httpx_proxies']) as _c:
                 paginated_resp = await _c.post(api_url, headers=custom_headers, content=paginated_post)
             try:
                 paginated_json = paginated_resp.json()

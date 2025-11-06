@@ -5,6 +5,7 @@
 playwright>=1.40.0
 httpx>=0.25.0
 httpcore[asyncio]>=1.0.0  # Required for httpx async support (with asyncio extras)
+urllib3<2.0  # Pin to v1.x for LibreSSL compatibility on macOS
 
 # Database
 psycopg2-binary>=2.9.0  # PostgreSQL adapter for Python (binary package, no compilation needed)
