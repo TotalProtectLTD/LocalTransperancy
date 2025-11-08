@@ -1,0 +1,141 @@
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 244, in collect_advertiser_creatives
+    await page.goto(advertiser_url, wait_until="domcontentloaded", timeout=60000)
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/async_api/_generated.py", line 8969, in goto
+    await self._impl_obj.goto(
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_page.py", line 553, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_frame.py", line 145, in goto
+    await self._channel.send("goto", locals_to_params(locals()))
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_connection.py", line 59, in send
+    return await self._connection.wrap_api_call(
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_connection.py", line 520, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://adstransparency.google.com/advertiser/AR18314076055809294337?region=anywhere&platform=YOUTUBE
+Call log:
+navigating to "https://adstransparency.google.com/advertiser/AR18314076055809294337?region=anywhere&platform=YOUTUBE", waiting until "domcontentloaded"
+
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 244, in collect_advertiser_creatives
+    await page.goto(advertiser_url, wait_until="domcontentloaded", timeout=60000)
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/async_api/_generated.py", line 8969, in goto
+    await self._impl_obj.goto(
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_page.py", line 553, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_frame.py", line 145, in goto
+    await self._channel.send("goto", locals_to_params(locals()))
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_connection.py", line 59, in send
+    return await self._connection.wrap_api_call(
+  File "/Users/rostoni/Library/Python/3.9/lib/python/site-packages/playwright/_impl/_connection.py", line 520, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://adstransparency.google.com/advertiser/AR17655480788478590977?region=anywhere&platform=YOUTUBE
+Call log:
+navigating to "https://adstransparency.google.com/advertiser/AR17655480788478590977?region=anywhere&platform=YOUTUBE", waiting until "domcontentloaded"
+
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 207, in collect_advertiser_creatives
+    raise RuntimeError("Failed to acquire proxy for this run")
+RuntimeError: Failed to acquire proxy for this run
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+Traceback (most recent call last):
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 664, in main
+    result = asyncio.run(collect_advertiser_creatives(advertiser_id, date_from_str=date_info.get('date_from'), date_to_str=date_info.get('date_to')))
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/Users/rostoni/Projects/LocalTransperancy/parser_of_advertiser.py", line 298, in collect_advertiser_creatives
+    raise RuntimeError("First SearchCreatives request failed")
+RuntimeError: First SearchCreatives request failed
+/Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh: line 21: flock: command not found
+/Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh: line 21: flock: command not found
+/Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh: line 21: flock: command not found
+/Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh: line 21: flock: command not found
+/Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh: line 21: flock: command not found

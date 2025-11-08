@@ -13,6 +13,7 @@ CLI flags:
   --limit N              Number of rows to send (default: 1)
   --secret SECRET        Override INCOMING_SHARED_SECRET env var or default
   --dry-run              Do not modify DB or call network; just print payloads
+  --debug                Do not modify DB (read-only) but still make HTTP calls
   --skip-empty-videos    Skip rows with empty youtube_video_ids
 """
 
@@ -306,6 +307,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=1, help="Number of rows to send (default: 1)")
     parser.add_argument("--secret", type=str, help="Shared secret override (else INCOMING_SHARED_SECRET env or default localhost secret)")
     parser.add_argument("--dry-run", action="store_true", help="Preview rows and payloads without DB/network side-effects")
+    parser.add_argument("--debug", action="store_true", help="Do not modify DB (read-only) but still make HTTP calls")
     parser.add_argument("--skip-empty-videos", action="store_true", help="Skip rows with empty youtube_video_ids []")
     return parser.parse_args()
 
@@ -313,11 +315,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     secret = args.secret or os.environ.get("INCOMING_SHARED_SECRET") or DEFAULT_LOCALHOST_SECRET
-    if not secret and not args.dry_run:
+    if not secret and not args.dry_run and not args.debug:
         print("❌ Missing shared secret: set INCOMING_SHARED_SECRET, use --secret, or default will be used")
         return 2
 
-    if args.dry_run:
+    # In debug mode, use read-only preview (no locks or status changes)
+    # In dry-run mode, also use read-only preview
+    # Otherwise, claim rows (sets status to 'syncing')
+    if args.dry_run or args.debug:
         rows = select_rows_preview(args.limit)
     else:
         rows = claim_rows(args.limit)
@@ -338,7 +343,7 @@ def main() -> int:
 
         if args.skip_empty_videos and not payload.get("youtube_video_ids"):
             print(f"- Skip id={row_id} (empty videos)")
-            if not args.dry_run:
+            if not args.dry_run and not args.debug:
                 mark_sync_failed(row_id, "Skipped: empty youtube_video_ids")
             continue
 
@@ -351,31 +356,41 @@ def main() -> int:
             ok, status_code, data = send_payload(payload, secret)
             if ok:
                 # Success or Duplicate (idempotent)
-                mark_synced(row_id)
+                if not args.debug:
+                    mark_synced(row_id)
                 successes += 1
                 msg = data.get("message") if isinstance(data, dict) else None
-                print(f"- ✓ id={row_id} HTTP {status_code} -> synced" + (f" ({msg})" if msg else ""))
+                status_msg = "-> synced" if not args.debug else "[DEBUG: would mark as synced]"
+                print(f"- ✓ id={row_id} HTTP {status_code} {status_msg}" + (f" ({msg})" if msg else ""))
             else:
                 # Capture error details
                 detail: Optional[str] = None
                 if isinstance(data, dict):
                     detail = data.get("detail") or data.get("message") or json.dumps(data)[:200]
-                mark_sync_failed(row_id, f"HTTP {status_code}: {detail or 'Unknown error'}")
+                if not args.debug:
+                    mark_sync_failed(row_id, f"HTTP {status_code}: {detail or 'Unknown error'}")
                 failures += 1
-                print(f"- ✗ id={row_id} HTTP {status_code} -> sync_failed")
+                status_msg = "-> sync_failed" if not args.debug else "[DEBUG: would mark as sync_failed]"
+                print(f"- ✗ id={row_id} HTTP {status_code} {status_msg}")
         except httpx.RequestError as e:
-            mark_sync_failed(row_id, f"Network error: {type(e).__name__}: {str(e)}")
+            if not args.debug:
+                mark_sync_failed(row_id, f"Network error: {type(e).__name__}: {str(e)}")
             failures += 1
-            print(f"- ✗ id={row_id} network error -> sync_failed")
+            status_msg = "-> sync_failed" if not args.debug else "[DEBUG: would mark as sync_failed]"
+            print(f"- ✗ id={row_id} network error {status_msg}")
         except Exception as e:
-            mark_sync_failed(row_id, f"Unexpected error: {type(e).__name__}: {str(e)}")
+            if not args.debug:
+                mark_sync_failed(row_id, f"Unexpected error: {type(e).__name__}: {str(e)}")
             failures += 1
-            print(f"- ✗ id={row_id} unexpected error -> sync_failed")
+            status_msg = "-> sync_failed" if not args.debug else "[DEBUG: would mark as sync_failed]"
+            print(f"- ✗ id={row_id} unexpected error {status_msg}")
 
-    if not args.dry_run:
-        print(f"Done. Success: {successes}, Failed: {failures}")
-    else:
+    if args.dry_run:
         print(f"[DRY-RUN] Previewed {total} row(s)")
+    elif args.debug:
+        print(f"[DEBUG] Done. Success: {successes}, Failed: {failures} (no DB changes made)")
+    else:
+        print(f"Done. Success: {successes}, Failed: {failures}")
 
     # Non-zero exit if any failures (when not dry-run)
     return 0 if args.dry_run or failures == 0 else 1

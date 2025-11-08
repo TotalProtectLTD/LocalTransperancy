@@ -75,7 +75,7 @@ except ImportError:
     psycopg2 = None
 
 # Pagination and DB config
-PAGINATION_DELAY_RANGE_SECONDS = (5.0, 10.0)
+PAGINATION_DELAY_RANGE_SECONDS = (1, 3)
 MAX_PAGINATION_PAGES = 5000
 
 DB_CONFIG = {
@@ -357,12 +357,102 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhe
                 "7": {"1": 1, "2": 39, "3": 2268}
             }
             paginated_post = "f.req=" + urllib.parse.quote(json.dumps(paginated_body, separators=(',', ':')))
-            async with httpx.AsyncClient(timeout=30.0, proxies=proxy_info['httpx_proxies']) as _c:
-                paginated_resp = await _c.post(api_url, headers=custom_headers, content=paginated_post)
-            try:
-                paginated_json = paginated_resp.json()
-            except Exception:
+            
+            # Retry logic for HTTP errors (especially 5xx)
+            max_retries = 3
+            retry_delays = [10, 20, 30]  # Longer delays for network problems
+            paginated_resp = None
+            paginated_json = None
+            
+            for attempt in range(max_retries):
+                try:
+                    async with httpx.AsyncClient(timeout=30.0, proxies=proxy_info['httpx_proxies']) as _c:
+                        paginated_resp = await _c.post(api_url, headers=custom_headers, content=paginated_post)
+                    
+                    # Check HTTP status code
+                    if paginated_resp.status_code >= 500:
+                        # 5xx errors - might be transient (API or proxy issue)
+                        if attempt < max_retries - 1:
+                            retry_delay = retry_delays[attempt]
+                            _log("WARN", f"[{pages+1}] HTTP {paginated_resp.status_code} error, retrying in {retry_delay}s", 
+                                 page=pages+1, status_code=paginated_resp.status_code, attempt=attempt+1, max_retries=max_retries)
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            # All retries exhausted
+                            response_preview = paginated_resp.text[:200] if paginated_resp.text else "No response body"
+                            _log("ERROR", f"[{pages+1}] Pagination stopped: HTTP {paginated_resp.status_code} after {max_retries} retries", 
+                                 page=pages+1, status_code=paginated_resp.status_code, response_preview=response_preview)
+                            break
+                    elif paginated_resp.status_code >= 400:
+                        # 4xx errors - client error, likely permanent
+                        response_preview = paginated_resp.text[:200] if paginated_resp.text else "No response body"
+                        _log("ERROR", f"[{pages+1}] Pagination stopped: HTTP {paginated_resp.status_code} client error", 
+                             page=pages+1, status_code=paginated_resp.status_code, response_preview=response_preview)
+                        break
+                    elif paginated_resp.status_code != 200:
+                        # Other non-200 status codes
+                        _log("WARN", f"[{pages+1}] Unexpected HTTP status {paginated_resp.status_code}", 
+                             page=pages+1, status_code=paginated_resp.status_code)
+                    
+                    # Try to parse JSON
+                    try:
+                        paginated_json = paginated_resp.json()
+                        break  # Success - exit retry loop
+                    except Exception as e:
+                        response_preview = paginated_resp.text[:200] if paginated_resp.text else "No response body"
+                        if attempt < max_retries - 1:
+                            retry_delay = retry_delays[attempt]
+                            _log("WARN", f"[{pages+1}] JSON parse failed, retrying in {retry_delay}s", 
+                                 page=pages+1, status_code=paginated_resp.status_code, error=str(e)[:100], attempt=attempt+1)
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            _log("ERROR", f"[{pages+1}] Pagination stopped: JSON parse failed after {max_retries} retries", 
+                                 page=pages+1, status_code=paginated_resp.status_code, error=str(e)[:100], response_preview=response_preview)
+                            break
+                            
+                except httpx.TimeoutException as e:
+                    if attempt < max_retries - 1:
+                        retry_delay = retry_delays[attempt]
+                        _log("WARN", f"[{pages+1}] Request timeout, retrying in {retry_delay}s", 
+                             page=pages+1, attempt=attempt+1, error=str(e)[:100])
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        _log("ERROR", f"[{pages+1}] Pagination stopped: request timeout after {max_retries} retries", 
+                             page=pages+1, error=str(e)[:100])
+                        break
+                except httpx.TransportError as e:
+                    # Network/transport error (includes proxy errors)
+                    if attempt < max_retries - 1:
+                        retry_delay = retry_delays[attempt]
+                        _log("WARN", f"[{pages+1}] Transport error, retrying in {retry_delay}s", 
+                             page=pages+1, attempt=attempt+1, error=str(e)[:100])
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        _log("ERROR", f"[{pages+1}] Pagination stopped: transport error after {max_retries} retries", 
+                             page=pages+1, error=str(e)[:100])
+                        break
+                except Exception as e:
+                    # Other unexpected errors
+                    if attempt < max_retries - 1:
+                        retry_delay = retry_delays[attempt]
+                        _log("WARN", f"[{pages+1}] Unexpected error, retrying in {retry_delay}s", 
+                             page=pages+1, attempt=attempt+1, error=str(e)[:100])
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        _log("ERROR", f"[{pages+1}] Pagination stopped: unexpected error after {max_retries} retries", 
+                             page=pages+1, error=str(e)[:200])
+                        break
+            
+            # If we didn't get a valid response, exit pagination
+            if paginated_json is None:
                 break
+            
+            # Process the response
             items = paginated_json.get("1", [])
             if isinstance(items, list):
                 before = len(creative_ids)
@@ -373,9 +463,15 @@ async def collect_advertiser_creatives(advertiser_id: str, region: str = "anywhe
                             creative_ids.append(cr)
                 added = len(creative_ids) - before
                 _log("INFO", f"[{pages+1}] Page collected +{added} creatives (total {len(set(creative_ids))})")
-            pagination_key = paginated_json.get("2")
+            new_pagination_key = paginated_json.get("2")
+            if not new_pagination_key:
+                _log("INFO", f"[{pages+1}] Pagination completed: no more pages (pagination_key is empty)")
+            pagination_key = new_pagination_key
             pages += 1
-    except Exception:
+        if pages >= MAX_PAGINATION_PAGES:
+            _log("WARN", "Pagination stopped: reached MAX_PAGINATION_PAGES limit", max_pages=MAX_PAGINATION_PAGES)
+    except Exception as e:
+        _log("ERROR", "Pagination stopped: exception occurred", error=str(e)[:200])
         pass
 
     return {
