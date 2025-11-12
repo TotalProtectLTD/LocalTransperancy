@@ -83,3 +83,4 @@ Your scheduler is ready. It will:
 5. Mark advertiser as completed
 6. Repeat every 2 minutes (when not busy)
 
+

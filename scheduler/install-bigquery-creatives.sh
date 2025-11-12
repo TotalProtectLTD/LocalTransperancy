@@ -62,3 +62,4 @@ echo "  - First run: Tonight at 11:30 PM"
 echo "  - Monitor: tail -f $LOGS_DIR/bigquery-creatives.log"
 echo "  - Status:  ./scheduler/status-cron.sh"
 
+

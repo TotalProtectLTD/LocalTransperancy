@@ -244,3 +244,4 @@ All jobs are independent and don't interfere with each other.
 - Parser script: `parser_of_advertiser.py`
 - Cron status: `./scheduler/status-cron.sh`
 
+

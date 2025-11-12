@@ -544,11 +544,12 @@ def insert_creatives_into_db(creative_ids: list, advertiser_id: str) -> Dict[str
     """
     Efficiently insert collected creative IDs into creatives_fresh.
     - Uses staging temp table + COPY for performance
-    - On duplicate creative_id: ignore (no update)
+    - On duplicate creative_id: ignore (no update) EXCEPT if status='bad_ad' → reactivate to 'pending'
+    - Reactivated creatives: status='pending', created_at updated, error_message cleared
     - created_at: set to 2057-<current_month>-<current_day>
-    Returns stats: {'input': N, 'new_rows': X, 'duplicates': Y}
+    Returns stats: {'input': N, 'new_rows': X, 'duplicates': Y, 'bad_ad_reactivated': Z}
     """
-    stats = {'input': len(creative_ids), 'new_rows': 0, 'duplicates': 0}
+    stats = {'input': len(creative_ids), 'new_rows': 0, 'duplicates': 0, 'bad_ad_reactivated': 0}
     if not creative_ids:
         return stats
     if psycopg2 is None:
@@ -587,6 +588,23 @@ def insert_creatives_into_db(creative_ids: list, advertiser_id: str) -> Dict[str
                 new_count, duplicate_count = cur.fetchone()
                 stats['new_rows'] = int(new_count or 0)
                 stats['duplicates'] = int(duplicate_count or 0)
+                
+                # Reactivate existing "bad_ad" creatives: update to "pending" with new created_at
+                cur.execute("""
+                    UPDATE creatives_fresh cf
+                    SET 
+                        status = 'pending',
+                        created_at = %s::timestamp,
+                        advertiser_id = s.advertiser_id,
+                        error_message = NULL
+                    FROM staging_creatives s
+                    WHERE cf.creative_id = s.creative_id 
+                      AND cf.status = 'bad_ad'
+                """, (created_date,))
+                reactivated_count = cur.rowcount
+                stats['bad_ad_reactivated'] = int(reactivated_count or 0)
+                
+                # Insert new creatives (excluding those that already exist)
                 cur.execute(
                     """
                     INSERT INTO creatives_fresh (creative_id, advertiser_id, created_at)
@@ -598,7 +616,11 @@ def insert_creatives_into_db(creative_ids: list, advertiser_id: str) -> Dict[str
                     """,
                     (created_date,)
                 )
-        _log("INFO", "DB insert completed", input=stats['input'], new=stats['new_rows'], duplicates=stats['duplicates'])
+        _log("INFO", "DB insert completed", 
+             input=stats['input'], 
+             new=stats['new_rows'], 
+             duplicates=stats['duplicates'],
+             bad_ad_reactivated=stats['bad_ad_reactivated'])
         return stats
     except Exception:
         return stats
