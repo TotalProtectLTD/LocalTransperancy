@@ -28,8 +28,8 @@ cat > "$SCRIPT_DIR/crontab-new.txt" << EOF
 # Run send_incoming_creative.py every 4 minutes
 */4 * * * * /Users/rostoni/bin/cron-send-creatives.sh >> $LOGS_DIR/send-creatives.log 2>> $LOGS_DIR/send-creatives-error.log
 
-# Run parser_of_advertiser.py every 2 minutes (with flock to prevent overlap)
-*/2 * * * * $SCRIPT_DIR/run-parser-advertiser.sh >> $LOGS_DIR/parser-advertiser.log 2>> $LOGS_DIR/parser-advertiser-error.log
+# Run parser_of_advertiser.py every 1 minute (with flock to prevent overlap)
+* * * * * $SCRIPT_DIR/run-parser-advertiser.sh >> $LOGS_DIR/parser-advertiser.log 2>> $LOGS_DIR/parser-advertiser-error.log
 EOF
 
 # Install new crontab
@@ -40,7 +40,7 @@ echo
 echo "Scheduled jobs:"
 echo "  - bigquery_advertisers_postgres.py: Daily at 11:00 PM"
 echo "  - send_incoming_creative.py: Every 4 minutes"
-echo "  - parser_of_advertiser.py: Every 2 minutes (overlap-safe)"
+echo "  - parser_of_advertiser.py: Every 1 minute (overlap-safe)"
 echo
 echo "Logs: $LOGS_DIR/"
 echo
@@ -55,7 +55,7 @@ echo "  Edit:   crontab -e"
 echo "  Remove: crontab -r"
 echo
 echo "Next steps:"
-echo "  - Wait 2 minutes for first parser_of_advertiser.py run"
+echo "  - Wait 1 minute for first parser_of_advertiser.py run"
 echo "  - Check logs: tail -f $LOGS_DIR/parser-advertiser.log"
 echo "  - View status: ./scheduler/status-cron.sh"
 

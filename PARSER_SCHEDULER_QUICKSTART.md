@@ -26,7 +26,7 @@ tail -50 ./scheduler/logs/parser-advertiser.log
 ## ⚙️ How It Works
 
 ```
-Every 2 minutes:
+Every 1 minute:
     ↓
 Is script already running?
     ├─ YES → Skip (log message)
@@ -34,7 +34,7 @@ Is script already running?
 ```
 
 **Key Features:**
-- ✅ Runs every 2 minutes when idle
+- ✅ Runs every 1 minute when idle
 - ✅ Never overlaps (even if one run takes 30 minutes)
 - ✅ Automatic stale lock cleanup
 - ✅ Adapts to execution time
@@ -44,7 +44,7 @@ Is script already running?
 ```
 ✓ bigquery_advertisers_postgres.py → Daily at 2:00 AM
 ✓ send_incoming_creative.py → Every 4 minutes
-✓ parser_of_advertiser.py → Every 2 minutes (overlap-safe)
+✓ parser_of_advertiser.py → Every 1 minute (overlap-safe)
 ```
 
 ## 📚 Full Documentation
@@ -81,6 +81,7 @@ Your scheduler is ready. It will:
 3. Insert into database
 4. Update last_seen timestamps
 5. Mark advertiser as completed
-6. Repeat every 2 minutes (when not busy)
+6. Repeat every 1 minute (when not busy)
+
 
 

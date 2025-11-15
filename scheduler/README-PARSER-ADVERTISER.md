@@ -2,7 +2,7 @@
 
 ## Overview
 
-`parser_of_advertiser.py` is scheduled to run every 2 minutes but uses **PID-based locking** to prevent concurrent execution. This solves the problem of variable execution time (10 seconds to 30 minutes).
+`parser_of_advertiser.py` is scheduled to run every 1 minute but uses **PID-based locking** to prevent concurrent execution. This solves the problem of variable execution time (10 seconds to 30 minutes).
 
 ## How It Works
 
@@ -14,7 +14,7 @@
 ### The Solution: PID-Based Locking
 
 ```
-Cron Schedule: Every 2 minutes
+Cron Schedule: Every 1 minute
     ↓
 Wrapper Script Checks Lock
     ↓
@@ -41,7 +41,7 @@ cd /Users/rostoni/Projects/LocalTransperancy
 ```
 
 This will:
-- Add parser_of_advertiser.py to crontab (every 2 minutes)
+- Add parser_of_advertiser.py to crontab (every 1 minute)
 - Keep existing scheduled jobs (bigquery-advertisers, send-creatives)
 - Create log directories
 
@@ -82,7 +82,7 @@ tail -50 ./scheduler/logs/parser-advertiser.log
 02:04 → Script starts (PID 12401), finishes in 10s
 ```
 
-**Result**: Runs every 2 minutes as scheduled
+**Result**: Runs every 1 minute as scheduled
 
 ### Scenario 2: Long Execution (30 minutes)
 
@@ -243,5 +243,6 @@ All jobs are independent and don't interfere with each other.
 - Main scheduler README: `./scheduler/README.md`
 - Parser script: `parser_of_advertiser.py`
 - Cron status: `./scheduler/status-cron.sh`
+
 
 
