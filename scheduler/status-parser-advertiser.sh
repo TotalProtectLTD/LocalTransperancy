@@ -38,7 +38,7 @@ echo
 # Check crontab
 if crontab -l 2>/dev/null | grep -q "run-parser-advertiser.sh"; then
     CRON_SCHEDULE=$(crontab -l | grep "run-parser-advertiser.sh" | awk '{print $1, $2, $3, $4, $5}')
-    echo "📅 Cron schedule: $CRON_SCHEDULE (every 2 minutes)"
+    echo "📅 Cron schedule: $CRON_SCHEDULE (every 1 minute)"
 else
     echo "⚠️  Not found in crontab"
     echo "   Install with: ./scheduler/install-parser-advertiser.sh"

@@ -626,6 +626,50 @@ def insert_creatives_into_db(creative_ids: list, advertiser_id: str) -> Dict[str
         return stats
 
 
+def update_known_creatives_status(scraped_ids: list, known_creatives: list, advertiser_id: str) -> Dict[str, int]:
+    """
+    Update status='pending' and sync=false for scraped creatives that exist in known_creatives list.
+    Only updates creatives that are both in known_creatives AND in scraped_ids (intersection).
+    Returns: {'checked': N, 'updated': M, 'matched': K}
+    """
+    stats = {'checked': len(scraped_ids), 'updated': 0, 'matched': 0}
+    
+    if not known_creatives or not scraped_ids:
+        return stats
+    
+    if psycopg2 is None:
+        return stats
+    
+    # Find intersection: creatives that are both known and scraped
+    known_set = set(known_creatives)
+    scraped_set = set(scraped_ids)
+    matching_ids = list(known_set & scraped_set)
+    
+    stats['matched'] = len(matching_ids)
+    
+    if not matching_ids:
+        return stats
+    
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE creatives_fresh
+                    SET status = 'pending', sync = false
+                    WHERE creative_id = ANY(%s)
+                """, (matching_ids,))
+                updated_count = cur.rowcount
+                stats['updated'] = int(updated_count or 0)
+        _log("INFO", "Known creatives updated", 
+             checked=stats['checked'], 
+             matched=stats['matched'],
+             updated=stats['updated'])
+        return stats
+    except Exception:
+        return stats
+
+
 def bulk_update_creatives_last_seen(creative_ids: list, seen_date_iso: str) -> Dict[str, Any]:
     summary = {
         'batches': 0,
@@ -773,6 +817,9 @@ def main():
             if not advertiser_id:
                 raise RuntimeError('API returned invalid advertiser payload (missing transparency_id)')
 
+        # Extract known_creatives if present
+        known_creatives = advertiser_meta.get('known_creatives', []) if advertiser_meta else []
+
         # Compute date range
         if advertiser_meta:
             date_info = compute_dates_from_meta(advertiser_meta)
@@ -796,6 +843,18 @@ def main():
             try:
                 insert_stats = insert_creatives_into_db(result.get('creative_ids', []), advertiser_id)
                 result['db_insert_stats'] = insert_stats
+            except Exception:
+                pass
+
+        # Update known_creatives status if provided
+        if known_creatives and not args.dry_run and not args.no_db_insert:
+            try:
+                update_stats = update_known_creatives_status(
+                    result.get('creative_ids', []), 
+                    known_creatives,
+                    advertiser_id
+                )
+                result['known_creatives_update_stats'] = update_stats
             except Exception:
                 pass
 

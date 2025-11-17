@@ -1,14 +1,11 @@
 # LocalTransperancy Scheduled Jobs - Projects Location
-# Generated: Thu Nov  6 17:55:38 +04 2025
+# Generated: Sat Nov 15 13:41:46 +04 2025
 
 # Run bigquery_advertisers_postgres.py daily at 11:00 PM
 0 23 * * * /usr/bin/python3 /Users/rostoni/Projects/LocalTransperancy/bigquery_advertisers_postgres.py >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-advertisers.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-advertisers-error.log
 
-# Run bigquery_creatives_postgres.py daily at 11:30 PM with yesterday's date
-30 23 * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-bigquery-creatives.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-creatives.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-creatives-error.log
-
 # Run send_incoming_creative.py every 4 minutes
 */4 * * * * /Users/rostoni/bin/cron-send-creatives.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives-error.log
 
-# Run parser_of_advertiser.py every 2 minutes (with flock to prevent overlap)
-*/2 * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser-error.log
+# Run parser_of_advertiser.py every 1 minute (with flock to prevent overlap)
+* * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser-error.log

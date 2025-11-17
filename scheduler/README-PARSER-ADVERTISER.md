@@ -78,8 +78,8 @@ tail -50 ./scheduler/logs/parser-advertiser.log
 
 ```
 02:00 → Script starts (PID 12345), finishes in 10s
-02:02 → Script starts (PID 12389), finishes in 10s  
-02:04 → Script starts (PID 12401), finishes in 10s
+02:01 → Script starts (PID 12389), finishes in 10s  
+02:02 → Script starts (PID 12401), finishes in 10s
 ```
 
 **Result**: Runs every 1 minute as scheduled
@@ -88,12 +88,12 @@ tail -50 ./scheduler/logs/parser-advertiser.log
 
 ```
 02:00 → Script starts (PID 12345)
+02:01 → Skipped (PID 12345 still running)
 02:02 → Skipped (PID 12345 still running)
-02:04 → Skipped (PID 12345 still running)
-02:06 → Skipped (PID 12345 still running)
+02:03 → Skipped (PID 12345 still running)
 ...
 02:30 → Script finishes (PID 12345)
-02:32 → Script starts (PID 12890)
+02:31 → Script starts (PID 12890)
 ```
 
 **Result**: No overlap, resumes as soon as previous execution finishes
@@ -134,8 +134,8 @@ tail -50 ./scheduler/logs/parser-advertiser.log
 Edit crontab schedule in `install-parser-advertiser.sh`:
 
 ```bash
-# Current: Every 2 minutes
-*/2 * * * * ...
+# Current: Every 1 minute
+* * * * * ...
 
 # Every 1 minute (more aggressive)
 * * * * * ...
@@ -213,16 +213,16 @@ ps aux | grep cron
 
 ## Performance Expectations
 
-### With 2-Minute Schedule:
+### With 1-Minute Schedule:
 
-- **If avg execution = 10s**: ~30 runs/hour, ~720 runs/day
+- **If avg execution = 10s**: ~60 runs/hour, ~1440 runs/day
 - **If avg execution = 5min**: ~12 runs/hour, ~288 runs/day
 - **If avg execution = 30min**: ~2 runs/hour, ~48 runs/day
 
 ### Optimal Schedule:
 
-The 2-minute schedule is optimal because:
-1. Quick jobs run frequently (max 2-minute delay)
+The 1-minute schedule is optimal because:
+1. Quick jobs run frequently (max 1-minute delay)
 2. Long jobs never overlap
 3. System resumes immediately when job finishes
 
@@ -233,7 +233,7 @@ Current cron jobs:
 ```
 1. bigquery_advertisers_postgres.py → Daily at 2:00 AM
 2. send_incoming_creative.py → Every 4 minutes
-3. parser_of_advertiser.py → Every 2 minutes (overlap-safe)
+3. parser_of_advertiser.py → Every 1 minute (overlap-safe)
 ```
 
 All jobs are independent and don't interfere with each other.
