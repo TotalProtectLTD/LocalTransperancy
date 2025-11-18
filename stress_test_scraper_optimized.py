@@ -605,12 +605,19 @@ async def scrape_batch_optimized(
                 cache_stats = get_cache_statistics()
                 
                 # Build result dictionary
+                # Use app_ids_from_base64 as fallback when app_store_id is None
+                appstore_id = extraction_results.get('app_store_id')
+                app_ids_from_base64 = extraction_results.get('app_ids_from_base64', [])
+                if not appstore_id and app_ids_from_base64:
+                    # Use first app ID from base64 if no direct App Store ID found
+                    appstore_id = app_ids_from_base64[0]
+                
                 result_dict = {
                     'creative_db_id': first_creative['id'],
                     'success': True,
                     'videos': extraction_results['unique_videos'],
                     'video_count': len(extraction_results['unique_videos']),
-                    'appstore_id': extraction_results['app_store_id'],
+                    'appstore_id': appstore_id,
                     'funded_by': funded_by,
                     'country_presence': country_presence,
                     'real_creative_id': real_creative_id,
@@ -688,12 +695,19 @@ async def scrape_batch_optimized(
                     )
                     
                     # Convert to stress test format
+                    # Use app_ids_from_base64 as fallback when app_store_id is None
+                    appstore_id = api_result.get('app_store_id')
+                    app_ids_from_base64 = api_result.get('app_ids_from_base64', [])
+                    if not appstore_id and app_ids_from_base64:
+                        # Use first app ID from base64 if no direct App Store ID found
+                        appstore_id = app_ids_from_base64[0]
+                    
                     result_dict = {
                         'creative_db_id': creative['id'],
                         'success': api_result.get('success', False),
                         'videos': api_result.get('videos', []),
                         'video_count': api_result.get('video_count', 0),
-                        'appstore_id': api_result.get('app_store_id'),
+                        'appstore_id': appstore_id,
                         'funded_by': api_result.get('funded_by'),
                         'country_presence': api_result.get('country_presence'),
                         'real_creative_id': api_result.get('real_creative_id'),
