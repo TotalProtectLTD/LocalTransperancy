@@ -52,7 +52,7 @@ fi
 
 echo
 echo "Next scheduled runs:"
-echo "  - send-creatives: Every 2 minutes (limit 15)"
+echo "  - send-creatives: Every 1 minute (batch 30)"
 echo "  - bigquery-advertisers: Daily at 11:00 PM"
 echo
 echo "View logs:"

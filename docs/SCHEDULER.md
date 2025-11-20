@@ -25,17 +25,17 @@ The scheduler automatically runs data import scripts on a daily basis, ensuring 
 
 ### send_incoming_creative.py
 
-**Schedule:** Every 10 minutes
+**Schedule:** Every 1 minute
 
 **What it does:**
-- Selects up to 10 eligible creatives from PostgreSQL `creatives_fresh` table
+- Selects up to 30 eligible creatives from PostgreSQL `creatives_fresh` table
 - Sends them to the admin API at https://magictransparency.com/api/new-creative
 - Marks successful rows as synced
 - Marks failed rows with error messages
 
-**Arguments:** `--limit 10`
+**Arguments:** `--limit 30`
 
-**First execution:** 10 minutes after installation
+**First execution:** 1 minute after installation
 
 **Logs:** Available in `scheduler/logs/`
 
@@ -48,8 +48,8 @@ Quick start:
 # Install bigquery-advertisers scheduler (daily at 2 AM)
 ./scheduler/install.sh
 
-# Install send-creatives scheduler (every 10 minutes)
-./scheduler/install-send-creatives.sh
+# Install send-creatives scheduler (every 1 minute via cron)
+# Note: Cron is configured via install-cron.sh or install-bigquery-creatives.sh
 ```
 
 ## Monitoring

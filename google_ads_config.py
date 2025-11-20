@@ -99,6 +99,13 @@ PATTERN_APPSTORE_ESCAPED = r'(?:itunes|apps)(?:%2E|\.)apple(?:%2E|\.)com(?:%2F|/
 PATTERN_APPSTORE_DIRECT = r'/app/id(\d{9,10})'  # direct app/id pattern
 PATTERN_APPSTORE_JSON = r'"appId"\s*:\s*"(\d{9,10})"'  # JSON appId field
 
+# Play Store ID patterns
+# Package IDs can contain: letters, numbers, underscores, dots, and hyphens
+# Format: [a-zA-Z0-9_][a-zA-Z0-9_.-]* (must start with letter/number/underscore, can contain dots and hyphens)
+PATTERN_PLAYSTORE_STANDARD = r'play\.google\.com/store/apps/details\?id=([a-zA-Z0-9_][a-zA-Z0-9_.-]*)'  # standard Play Store URL
+PATTERN_PLAYSTORE_ESCAPED = r'play(?:%2E|\.)google(?:%2E|\.)com(?:%2F|/|\\x2F)store(?:%2F|/|\\x2F)apps(?:%2F|/|\\x2F)details(?:%3F|\\x3F|\?)(?:id%3D|id=)([a-zA-Z0-9_][a-zA-Z0-9_.-]*)'  # URL-encoded Play Store URL
+PATTERN_PLAYSTORE_ADURL = r'adurl[=:](?:https?%3A%2F%2F|https?://)?(?:[^"\'\s]*)?play\.google\.com(?:%2F|/|\\x2F)store(?:%2F|/|\\x2F)apps(?:%2F|/|\\x2F)details(?:%3F|\\x3F|\?)(?:id%3D|id=)([a-zA-Z0-9_][a-zA-Z0-9_.-]*)'  # adurl parameter with Play Store URL
+
 # Content.js and API patterns
 PATTERN_CONTENT_JS_URL = r'https://displayads-formats\.googleusercontent\.com/ads/preview/content\.js[^"\']*'  # content.js URL in API responses (including unicode escapes)
 

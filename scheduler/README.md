@@ -282,7 +282,7 @@ This scheduler is part of the Local Transparency project's automated data pipeli
 
 ## send_incoming_creative.py Scheduler
 
-The scheduler also includes support for `send_incoming_creative.py` which runs every 10 minutes.
+The scheduler also includes support for `send_incoming_creative.py` which runs every 30 seconds.
 
 ### Quick Start
 
@@ -304,9 +304,9 @@ The scheduler also includes support for `send_incoming_creative.py` which runs e
 
 ### Schedule
 
-- **Frequency:** Every 10 minutes
+- **Frequency:** Every 30 seconds
 - **Arguments:** `--limit 10`
-- **First run:** 10 minutes after installation
+- **First run:** 30 seconds after installation
 
 ### Management Scripts
 

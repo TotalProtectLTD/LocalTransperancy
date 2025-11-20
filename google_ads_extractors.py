@@ -21,7 +21,10 @@ from google_ads_config import (
     PATTERN_APPSTORE_STANDARD,
     PATTERN_APPSTORE_ESCAPED,
     PATTERN_APPSTORE_DIRECT,
-    PATTERN_APPSTORE_JSON
+    PATTERN_APPSTORE_JSON,
+    PATTERN_PLAYSTORE_STANDARD,
+    PATTERN_PLAYSTORE_ESCAPED,
+    PATTERN_PLAYSTORE_ADURL
 )
 
 
@@ -95,6 +98,45 @@ def extract_app_store_id_from_text(text: str) -> Optional[Tuple[str, str]]:
         (
         re.compile(PATTERN_APPSTORE_JSON),
             "Pattern 4: JSON appId field"
+        ),
+    ]
+    
+    for pattern, description in patterns:
+        match = pattern.search(text)
+        if match:
+            return (match.group(1), description)
+    
+    return None
+
+
+def extract_play_store_id_from_text(text: str) -> Optional[Tuple[str, str]]:
+    """
+    Extract Play Store package ID from text.
+    
+    Handles multiple URL formats:
+    - https://play.google.com/store/apps/details?id=com.example.app
+    - URL-encoded versions with %2F, %3F, %3D, etc.
+    - JavaScript-escaped versions with \\x2F, \\x3F, \\x3D, etc.
+    - adurl parameter format: adurl=https://play.google.com/.../details?id=package.name
+    
+    Args:
+        text: Text content to search
+        
+    Returns:
+        tuple or None: (play_store_id, pattern_description) if found, None otherwise
+    """
+    patterns = [
+        (
+            re.compile(PATTERN_PLAYSTORE_STANDARD, re.IGNORECASE),
+            "Pattern 1: Standard Play Store URL (play.google.com/store/apps/details?id=package.name)"
+        ),
+        (
+            re.compile(PATTERN_PLAYSTORE_ESCAPED, re.IGNORECASE),
+            "Pattern 2: Escaped Play Store URL (URL encoded %2F, %3F, %3D, hex escaped \\x2F, etc.)"
+        ),
+        (
+            re.compile(PATTERN_PLAYSTORE_ADURL, re.IGNORECASE),
+            "Pattern 3: adurl parameter with Play Store URL (adurl=...play.google.com...details?id=package.name)"
         ),
     ]
     

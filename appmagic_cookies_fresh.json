@@ -1,0 +1,146 @@
+[
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1763544138,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_session",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "h2w17v5yx25um06b4cal922nc2q2jawu"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1769063116,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "_gcl_aw",
+        "path": "/",
+        "sameSite": null,
+        "secure": false,
+        "session": false,
+        "storeId": null,
+        "value": "GCL.1761287116.CjwKCAjwpOfHBhAxEiwAm1SwEvFLcbyDJqi6n9p1URE4CPZQomUotqrIDsX9qyJexBf7qjBZ54_P5BoC45YQAvD_BwE"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_realtime_services_key",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": true,
+        "storeId": null,
+        "value": ""
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1776500540,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_auth_token",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "user.2041850902721069193.7830-e4dd41f4662c0285e8163b41d6e.34ec28a1de1bbf0809c2d3c855f2e475c9420990de6920fb"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1763544138,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_session_started",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "1"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1769063116,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "_gcl_au",
+        "path": "/",
+        "sameSite": null,
+        "secure": false,
+        "session": false,
+        "storeId": null,
+        "value": "1.1.2080805028.1761287116"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1763543840,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_jwt_access",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdHQiOiJhY2Nlc3MiLCJleHAiOjE3NjM1NDQxNDAsImlhdCI6MTc2MzU0MDU0MCwianRpIjoiYTRjMzU3NWQzZDM5NGVhN2E5MTYxYjRiOTU3MTViODMiLCJhY3QiOiJ3ZWJfdXNlciIsInJvbGVzIjpbInVzZXIuJGFwcF9pZDo3ODMwLiR1c2VyX2lkOjIwOTAyNTQwMjA0NTQxMjIxMTkiLCJ1c2VyLiRhcHBfaWQ6NzgzMC4kdXNlcl9pZDoyMDgyMzIxNjg1NTc4NTE0Nzk2IiwidXNlci4kYXBwX2lkOjc4MzAuJHVzZXJfaWQ6MjA5MDI2NTk0NDc3NjUwNzkwMSIsInVzZXIuJGFwcF9pZDo3ODMwLiR1c2VyX2lkOjIwODIzMjIzNTYxNjM4Mzg3NzciLCJ1c2VyLiRhcHBfaWQ6NzgzMC4kdXNlcl9pZDoyMDQxODUwOTAyNzIxMDY5MTkzIiwidXNlci4kYXBwX2lkOjc4MzAuJHVzZXJfaWQ6MjA4NDY1NTExNDg3NzkyODIzOSJdLCJhcHBfaWQiOjc4MzAsInVzZXJfaWQiOjIwNDE4NTA5MDI3MjEwNjkxOTN9.MqlNP5kKvlV_WHyD7VRd04qq-gVzM4U8J59p45Wry44"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1769063115,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "_gcl_gs",
+        "path": "/",
+        "sameSite": null,
+        "secure": false,
+        "session": false,
+        "storeId": null,
+        "value": "2.1.k1$i1761287112$u121790427"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1798100538.680858,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_device_guid",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "c39c4632-dd7b-4f57-8262-a907daf5092e"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_realtime_services_transport",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": true,
+        "storeId": null,
+        "value": "wss"
+    },
+    {
+        "domain": ".appmagic.rocks",
+        "expirationDate": 1776500540,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "dashly_uid",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "2041850902721069193"
+    }
+]
+
+
+

@@ -1,0 +1,36 @@
+========================================
+Export Cookies Using Chrome Extension
+========================================
+
+Since Chrome encrypts cookie values, the best way is to use a Chrome extension:
+
+METHOD 1: Cookie-Editor Extension (Recommended)
+------------------------------------------------
+1. Install "Cookie-Editor" extension:
+   https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Go to https://appmagic.rocks (while logged in)
+
+3. Click the Cookie-Editor extension icon
+
+4. Click "Export" button
+
+5. Select "JSON" format
+
+6. Copy the JSON and save it to a file (e.g., appmagic_cookies.json)
+
+7. Then run:
+   python3 load_cookies_cursor_browser.py appmagic_cookies.json
+
+METHOD 2: EditThisCookie Extension
+------------------------------------
+1. Install "EditThisCookie":
+   https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg
+
+2. Go to https://appmagic.rocks (while logged in)
+
+3. Click extension icon → Export → JSON
+
+4. Save to appmagic_cookies.json
+
+5. Run: python3 load_cookies_cursor_browser.py appmagic_cookies.json

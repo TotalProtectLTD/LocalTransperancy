@@ -58,6 +58,11 @@ DB_CONFIG = {
     'port': 5432,
 }
 
+# Advertiser IDs to exclude from import
+EXCLUDED_ADVERTISER_IDS = {
+    'AR07816964328396947457',  # Exclude this advertiser from daily imports
+}
+
 
 # ============================================================================
 # QUERY GENERATION
@@ -554,13 +559,15 @@ def download_from_gcs(
 # POSTGRES IMPORT (STAGING + COPY + UPSERT)
 # ============================================================================
 
-def normalize_source_to_two_columns(source_csv_path: str) -> Tuple[str, int, int]:
+def normalize_source_to_two_columns(source_csv_path: str) -> Tuple[str, int, int, int]:
     """
     Create a temp CSV with only columns: creative_id, advertiser_id.
-    Returns: (temp_csv_path, total_rows_read, rows_written)
+    Filters out rows with excluded advertiser IDs.
+    Returns: (temp_csv_path, total_rows_read, rows_written, rows_filtered)
     """
     total_read = 0
     total_written = 0
+    total_filtered = 0
 
     tmp = tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False, newline='')
     tmp_path = tmp.name
@@ -585,10 +592,14 @@ def normalize_source_to_two_columns(source_csv_path: str) -> Tuple[str, int, int
                 advertiser_id = (row.get('advertiser_id') or '').strip()
                 if not creative_id or not advertiser_id:
                     continue
+                # Filter out excluded advertiser IDs
+                if advertiser_id in EXCLUDED_ADVERTISER_IDS:
+                    total_filtered += 1
+                    continue
                 writer.writerow([creative_id, advertiser_id])
                 total_written += 1
 
-        return tmp_path, total_read, total_written
+        return tmp_path, total_read, total_written, total_filtered
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -921,8 +932,10 @@ Examples:
             print("PostgreSQL Import")
             print(f"{'='*80}")
             print(f"Normalizing CSV to two columns (creative_id, advertiser_id)...")
-            tmp_csv, read_rows, written_rows = normalize_source_to_two_columns(download_result['local_path'])
-            print(f"  Normalized rows: read={read_rows:,}, kept={written_rows:,}")
+            tmp_csv, read_rows, written_rows, filtered_rows = normalize_source_to_two_columns(download_result['local_path'])
+            print(f"  Normalized rows: read={read_rows:,}, kept={written_rows:,}, filtered={filtered_rows:,}")
+            if filtered_rows > 0:
+                print(f"  Filtered out {filtered_rows:,} row(s) with excluded advertiser IDs: {', '.join(EXCLUDED_ADVERTISER_IDS)}")
 
             try:
                 print("Upserting into creatives_fresh (created_at = target date)...")

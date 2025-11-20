@@ -20,7 +20,7 @@
     <string>/Users/rostoni/Downloads/LocalTransperancy/scheduler/logs/send-creatives-error.log</string>
     
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>30</integer>
     
     <key>RunAtLoad</key>
     <false/>

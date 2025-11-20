@@ -3,32 +3,47 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS_DIR="$SCRIPT_DIR/logs"
-LOCKFILE="/tmp/parser_of_advertiser.lock"
+PID_DIR="/tmp/parser_of_advertiser_pids"
+MAX_INSTANCES=2
 
 echo "Checking parser_of_advertiser.py status..."
 echo
 
-# Check if currently running
-PIDFILE="/tmp/parser_of_advertiser.pid"
+# Count active instances by counting actual parser_of_advertiser.py processes
+ACTIVE_PIDS=($(ps aux | grep "[p]arser_of_advertiser.py" | awk '{print $2}'))
+ACTIVE_COUNT=${#ACTIVE_PIDS[@]}
 
-if [ -f "$LOCKFILE" ] && [ -f "$PIDFILE" ]; then
-    PID=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$PID" ] && ps -p "$PID" > /dev/null 2>&1; then
-        if ps -p "$PID" -o command= 2>/dev/null | grep -q "parser_of_advertiser.py"; then
-            echo "📊 Current status: 🔄 Running (PID $PID)"
-            # Show how long it's been running
-            LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$LOCKFILE" 2>/dev/null || stat -c %Y "$LOCKFILE" 2>/dev/null || echo 0) ))
-            if [ $LOCK_AGE -gt 0 ]; then
-                MINUTES=$(( LOCK_AGE / 60 ))
-                SECONDS=$(( LOCK_AGE % 60 ))
-                echo "   Running for: ${MINUTES}m ${SECONDS}s"
+# Clean up stale PID files
+if [ -d "$PID_DIR" ]; then
+    shopt -s nullglob
+    for pidfile in "$PID_DIR"/*.pid; do
+        [ -f "$pidfile" ] || continue
+        STORED_PID=$(cat "$pidfile" 2>/dev/null)
+        if [ -n "$STORED_PID" ]; then
+            # Check if the bash script (stored PID) is still running
+            if ! ps -p "$STORED_PID" > /dev/null 2>&1; then
+                # Bash script exited - remove stale PID file
+                rm -f "$pidfile"
             fi
         else
-            echo "📊 Current status: ✅ Idle (stale lock detected)"
+            # Empty PID file - remove it
+            rm -f "$pidfile"
         fi
-    else
-        echo "📊 Current status: ✅ Idle (stale lock detected)"
-    fi
+    done
+    shopt -u nullglob
+fi
+
+if [ $ACTIVE_COUNT -gt 0 ]; then
+    echo "📊 Current status: 🔄 Running ($ACTIVE_COUNT/$MAX_INSTANCES instances)"
+    for PID in "${ACTIVE_PIDS[@]}"; do
+        # Show how long it's been running
+        PID_START=$(ps -p "$PID" -o lstart= 2>/dev/null | awk '{print $2, $3, $4}')
+        if [ -n "$PID_START" ]; then
+            echo "   - PID $PID (started: $PID_START)"
+        else
+            echo "   - PID $PID"
+        fi
+    done
 else
     echo "📊 Current status: ✅ Idle (not running)"
 fi

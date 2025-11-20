@@ -25,8 +25,8 @@ cat > "$SCRIPT_DIR/crontab-new.txt" << EOF
 # Run bigquery_advertisers_postgres.py daily at 11:00 PM
 0 23 * * * /usr/bin/python3 $PROJECT_DIR/bigquery_advertisers_postgres.py >> $LOGS_DIR/bigquery-advertisers.log 2>> $LOGS_DIR/bigquery-advertisers-error.log
 
-# Run send_incoming_creative.py every 4 minutes
-*/4 * * * * /Users/rostoni/bin/cron-send-creatives.sh >> $LOGS_DIR/send-creatives.log 2>> $LOGS_DIR/send-creatives-error.log
+# Run send_incoming_creative.py every 1 minute (batch 30)
+* * * * * /Users/rostoni/bin/cron-send-creatives.sh >> $LOGS_DIR/send-creatives.log 2>> $LOGS_DIR/send-creatives-error.log
 
 # Run parser_of_advertiser.py every 1 minute (with flock to prevent overlap)
 * * * * * $SCRIPT_DIR/run-parser-advertiser.sh >> $LOGS_DIR/parser-advertiser.log 2>> $LOGS_DIR/parser-advertiser-error.log
@@ -39,7 +39,7 @@ echo "✅ Cron jobs installed successfully!"
 echo
 echo "Scheduled jobs:"
 echo "  - bigquery_advertisers_postgres.py: Daily at 11:00 PM"
-echo "  - send_incoming_creative.py: Every 4 minutes"
+echo "  - send_incoming_creative.py: Every 1 minute (batch 30)"
 echo "  - parser_of_advertiser.py: Every 1 minute (overlap-safe)"
 echo
 echo "Logs: $LOGS_DIR/"

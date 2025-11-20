@@ -1,0 +1,110 @@
+[
+  {
+    "name": "_gcl_au",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": false,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1769063116
+  },
+  {
+    "name": "_gcl_aw",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": false,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1769063116
+  },
+  {
+    "name": "_gcl_gs",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": false,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1769063115
+  },
+  {
+    "name": "dashly_auth_token",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1776500540
+  },
+  {
+    "name": "dashly_device_guid",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1798100538
+  },
+  {
+    "name": "dashly_jwt_access",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1763543840
+  },
+  {
+    "name": "dashly_realtime_services_key",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "dashly_realtime_services_transport",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "dashly_session",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1763544138
+  },
+  {
+    "name": "dashly_session_started",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1763544138
+  },
+  {
+    "name": "dashly_uid",
+    "value": "",
+    "domain": ".appmagic.rocks",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "None",
+    "expires": 1776500540
+  }
+]

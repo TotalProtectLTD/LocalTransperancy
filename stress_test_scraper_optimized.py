@@ -349,7 +349,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
     Use query_errors.sql to analyze these errors in detail.
     
     Updates the following fields on success:
-    - video_count, video_ids, appstore_id, funded_by, scraped_at, error_message
+    - video_count, video_ids, appstore_id, playstore, funded_by, scraped_at, error_message
     
     Args:
         creative_id: Database ID of the creative
@@ -366,6 +366,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                     video_count = %s,
                     video_ids = %s,
                     appstore_id = NULLIF(BTRIM(%s), ''),
+                    playstore = NULLIF(BTRIM(%s), ''),
                     funded_by = %s,
                     country_presence = %s,
                     scraped_at = %s,
@@ -375,6 +376,7 @@ def update_result(creative_id: int, result: Dict[str, Any]):
                 result.get('video_count', 0),
                 json.dumps(result.get('videos', [])),
                 result.get('appstore_id'),
+                result.get('playstore_id'),
                 result.get('funded_by'),
                 country_presence_json,
                 datetime.utcnow(),
@@ -607,6 +609,7 @@ async def scrape_batch_optimized(
                 # Build result dictionary
                 # Use app_ids_from_base64 as fallback when app_store_id is None
                 appstore_id = extraction_results.get('app_store_id')
+                playstore_id = extraction_results.get('play_store_id')
                 app_ids_from_base64 = extraction_results.get('app_ids_from_base64', [])
                 if not appstore_id and app_ids_from_base64:
                     # Use first app ID from base64 if no direct App Store ID found
@@ -618,6 +621,7 @@ async def scrape_batch_optimized(
                     'videos': extraction_results['unique_videos'],
                     'video_count': len(extraction_results['unique_videos']),
                     'appstore_id': appstore_id,
+                    'playstore_id': playstore_id,
                     'funded_by': funded_by,
                     'country_presence': country_presence,
                     'real_creative_id': real_creative_id,
@@ -642,6 +646,7 @@ async def scrape_batch_optimized(
                 print(f"    ❌ {first_creative['creative_id'][:15]}... - {error_msg[:60]}")
                 sys.stdout.flush()
                 
+                # Add error result for first creative
                 results.append({
                     'creative_db_id': first_creative['id'],
                     'success': False,
@@ -653,7 +658,22 @@ async def scrape_batch_optimized(
                     'funded_by': None
                 })
                 
-                # If first creative fails, close browser and return
+                # If first creative fails, create error results for ALL remaining creatives
+                # This ensures they get marked as 'pending' instead of staying stuck as 'processing'
+                print(f"    ⚠️  First creative failed - marking remaining {len(creative_batch) - 1} creatives for retry")
+                for remaining_creative in creative_batch[1:]:
+                    results.append({
+                        'creative_db_id': remaining_creative['id'],
+                        'success': False,
+                        'error': f"Batch failed: First creative failed with {error_msg}",
+                        'duration_ms': 0,
+                        'videos': [],
+                        'video_count': 0,
+                        'appstore_id': None,
+                        'funded_by': None
+                    })
+                
+                # Close browser and return all results
                 await browser.close()
                 return results
             
@@ -697,6 +717,7 @@ async def scrape_batch_optimized(
                     # Convert to stress test format
                     # Use app_ids_from_base64 as fallback when app_store_id is None
                     appstore_id = api_result.get('app_store_id')
+                    playstore_id = api_result.get('play_store_id')
                     app_ids_from_base64 = api_result.get('app_ids_from_base64', [])
                     if not appstore_id and app_ids_from_base64:
                         # Use first app ID from base64 if no direct App Store ID found
@@ -707,6 +728,7 @@ async def scrape_batch_optimized(
                         'success': api_result.get('success', False),
                         'videos': api_result.get('videos', []),
                         'video_count': api_result.get('video_count', 0),
+                        'playstore_id': playstore_id,
                         'appstore_id': appstore_id,
                         'funded_by': api_result.get('funded_by'),
                         'country_presence': api_result.get('country_presence'),
@@ -838,32 +860,79 @@ async def worker(
                 # Scrape entire batch (optimized with session reuse)
                 results = await scrape_batch_optimized(creative_batch, proxy_config, worker_id, use_partial_proxy)
                 
-                # Update database for each result
+                # Safety check: Ensure we have results for all creatives in batch
+                # If not, create error results for missing ones to prevent stuck 'processing' status
+                result_creative_ids = {result.get('creative_db_id') for result in results if 'creative_db_id' in result}
+                batch_creative_ids = {creative['id'] for creative in creative_batch}
+                missing_creative_ids = batch_creative_ids - result_creative_ids
+                
+                if missing_creative_ids:
+                    print(f"  ⚠️  [Worker {worker_id}] Missing results for {len(missing_creative_ids)} creatives - creating error results")
+                    for missing_id in missing_creative_ids:
+                        # Find the creative info
+                        missing_creative = next(c for c in creative_batch if c['id'] == missing_id)
+                        results.append({
+                            'creative_db_id': missing_id,
+                            'success': False,
+                            'error': 'Missing result from batch processing - marked for retry',
+                            'duration_ms': 0,
+                            'videos': [],
+                            'video_count': 0,
+                            'appstore_id': None,
+                            'funded_by': None
+                        })
+                
+                # Update database for each result (with exception handling to prevent stuck rows)
                 for result in results:
-                    creative_db_id = result.pop('creative_db_id')
-                    update_result(creative_db_id, result)
-                    
-                    # Update shared statistics
-                    async with stats_lock:
-                        stats['processed'] += 1
-                        if result['success']:
-                            stats['success'] += 1
-                        else:
-                            # Classify error type
-                            error_msg = result.get('error', '')
-                            should_retry, _, error_category = classify_error(error_msg)
-                            
-                            if should_retry:
-                                stats['retries'] += 1
-                            elif error_category == 'bad_ad':
-                                stats['bad_ads'] += 1
-                            else:
-                                stats['failed'] += 1
+                    try:
+                        creative_db_id = result.pop('creative_db_id', None)
+                        if creative_db_id is None:
+                            print(f"  ⚠️  [Worker {worker_id}] Skipping result without creative_db_id: {result}")
+                            continue
                         
-                        # Accumulate cache statistics
-                        stats['cache_hits'] += result.get('cache_hits', 0)
-                        stats['cache_misses'] += result.get('cache_misses', 0)
-                        stats['cache_bytes_saved'] += result.get('cache_bytes_saved', 0)
+                        update_result(creative_db_id, result)
+                        
+                        # Update shared statistics
+                        async with stats_lock:
+                            stats['processed'] += 1
+                            if result['success']:
+                                stats['success'] += 1
+                            else:
+                                # Classify error type
+                                error_msg = result.get('error', '')
+                                should_retry, _, error_category = classify_error(error_msg)
+                                
+                                if should_retry:
+                                    stats['retries'] += 1
+                                elif error_category == 'bad_ad':
+                                    stats['bad_ads'] += 1
+                                else:
+                                    stats['failed'] += 1
+                            
+                            # Accumulate cache statistics
+                            stats['cache_hits'] += result.get('cache_hits', 0)
+                            stats['cache_misses'] += result.get('cache_misses', 0)
+                            stats['cache_bytes_saved'] += result.get('cache_bytes_saved', 0)
+                    except Exception as update_error:
+                        # If update fails, mark creative as pending for retry to prevent stuck status
+                        print(f"  ❌ [Worker {worker_id}] Failed to update creative {creative_db_id}: {update_error}")
+                        try:
+                            # Try to mark as pending for retry
+                            with get_db_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    UPDATE creatives_fresh
+                                    SET status = 'pending',
+                                        error_message = %s
+                                    WHERE id = %s
+                                """, (
+                                    f"Update failed: {type(update_error).__name__} - pending retry",
+                                    creative_db_id
+                                ))
+                                conn.commit()
+                            print(f"  ✓ [Worker {worker_id}] Marked creative {creative_db_id} as pending for retry")
+                        except Exception as fallback_error:
+                            print(f"  ❌ [Worker {worker_id}] Failed to mark creative {creative_db_id} as pending: {fallback_error}")
                 
                 # Print progress after batch (every 20 URLs)
                 async with stats_lock:

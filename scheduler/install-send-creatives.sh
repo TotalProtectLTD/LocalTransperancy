@@ -43,7 +43,7 @@ if launchctl list | grep -q "com.localtransparency.send-creatives"; then
     echo
     echo "Agent details:"
     echo "  Label: com.localtransparency.send-creatives"
-    echo "  Schedule: Every 10 minutes"
+    echo "  Schedule: Every 30 seconds"
     echo "  Arguments: --limit 10"
     echo "  Logs: $LOGS_DIR/"
     echo

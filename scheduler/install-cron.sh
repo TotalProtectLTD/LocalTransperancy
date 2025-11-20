@@ -25,8 +25,8 @@ cat > "$SCRIPT_DIR/crontab-new.txt" << EOF
 # Run bigquery_advertisers_postgres.py daily at 11:00 PM
 0 23 * * * /usr/bin/python3 $PROJECT_DIR/bigquery_advertisers_postgres.py >> $LOGS_DIR/bigquery-advertisers.log 2>> $LOGS_DIR/bigquery-advertisers-error.log
 
-# Run send_incoming_creative.py every 4 minutes
-*/4 * * * * /Users/rostoni/bin/cron-send-creatives.sh >> $LOGS_DIR/send-creatives.log 2>> $LOGS_DIR/send-creatives-error.log
+# Run send_incoming_creative.py every 1 minute (batch 30)
+* * * * * /Users/rostoni/bin/cron-send-creatives.sh >> $LOGS_DIR/send-creatives.log 2>> $LOGS_DIR/send-creatives-error.log
 EOF
 
 # Install new crontab
@@ -36,7 +36,7 @@ echo "✅ Cron jobs installed successfully!"
 echo
 echo "Scheduled jobs:"
 echo "  - bigquery_advertisers_postgres.py: Daily at 11:00 PM"
-echo "  - send_incoming_creative.py: Every 4 minutes"
+echo "  - send_incoming_creative.py: Every 1 minute (batch 30)"
 echo
 echo "Logs: $LOGS_DIR/"
 echo
@@ -46,7 +46,7 @@ echo "  Edit:   crontab -e"
 echo "  Remove: crontab -r"
 echo
 echo "Next steps:"
-echo "  - Wait 4 minutes for first send_incoming_creative.py run"
+echo "  - Wait 1 minute for first send_incoming_creative.py run"
 echo "  - Check logs: tail -f $LOGS_DIR/send-creatives.log"
 echo "  - View status: ./scheduler/status-cron.sh"
 

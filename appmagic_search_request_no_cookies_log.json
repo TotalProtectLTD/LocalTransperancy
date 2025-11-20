@@ -1,0 +1,215 @@
+{
+  "request": {
+    "url": "https://appmagic.rocks/api/v2/search?name=1337578317&limit=20",
+    "method": "GET",
+    "query_parameters": {
+      "name": "1337578317",
+      "limit": "20"
+    },
+    "credentials": "omit",
+    "note": "Request made WITHOUT cookies (credentials: 'omit'). This prevents the browser from sending any cookies with the request.",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "ru-RU,ru,en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+      "Referer": "https://appmagic.rocks/top-charts/publishers",
+      "Origin": "https://appmagic.rocks",
+      "Connection": "keep-alive",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "Cookie": "NOT SENT (credentials: 'omit')",
+      "note": "Browser automatically adds User-Agent, Referer, Origin, Accept-Encoding, Connection, and Sec-Fetch-* headers. These are standard browser headers sent with all requests."
+    }
+  },
+  "cookies": {
+    "sent_with_request": false,
+    "note": "No cookies were sent with this request due to credentials: 'omit'",
+    "browser_cookies_available": "_gcl_au=1.1.1324459414.1763557221; dashly_session=4sq9el404t5lwwoa79hpsklbxi9e1tr8; dashly_session_started=1; dashly_device_guid=52881f8e-2acf-49f4-84ae-9be8f27012d4; dashly_uid=2109308970622517656; dashly_auth_token=user.2109308970622517656.7830-e4dd41f4662c0285e8163b41d6e.221bde05aa3296f9ac14b134b0809b8957bbc43379d48851; dashly_jwt_access=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdHQiOiJhY2Nlc3MiLCJleHAiOjE3NjM1NjA4MjQsImlhdCI6MTc2MzU1NzIyNCwianRpIjoiOWEyMzc2MDhkZGQ1NDJmOWI4NzAzZDg3MGI5MWVkMGYiLCJhY3QiOiJ3ZWJfdXNlciIsInJvbGVzIjpbInVzZXIuJGFwcF9pZDo3ODMwLiR1c2VyX2lkOjIxMDkzMDg5NzA2MjI1MTc2NTYiXSwiYXBwX2lkIjo3ODMwLCJ1c2VyX2lkIjoyMTA5MzA4OTcwNjIyNTE3NjU2fQ.-N7C_Ob0qXtjcXElKEjg3BLwRQmqfVfut56zMuLDr9s; dashly_realtime_services_transport=wss",
+    "note_2": "These cookies exist in the browser but were NOT sent with the request"
+  },
+  "response": {
+    "status": 200,
+    "statusText": "",
+    "headers": {
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9a0fe9802e533107-TBS",
+      "content-encoding": "gzip",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Wed, 19 Nov 2025 13:04:13 GMT",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=SLYioE3%2BQ2g5LVat9RhGNPTVnyr8POrUaq0ukBbkaNfy0SgQfdkEl1QR9oilPNsTKLcPxzAv31uUbYay8JFbc1bb1TVwRKlbHfWSQfw%3D\"}]}",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept-Encoding",
+      "with-cache": "false",
+      "x-ratelimit-limit": "500",
+      "x-ratelimit-remaining": "499"
+    },
+    "data": {
+      "applications": [
+        {
+          "id": 5730166,
+          "tags": [
+            {
+              "id": 58,
+              "name": "Virtual Pet",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [54],
+              "type": "games"
+            },
+            {
+              "id": 3,
+              "name": "Games",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [],
+              "type": "domain"
+            },
+            {
+              "id": 243572,
+              "name": "Casual",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [],
+              "type": "meta"
+            },
+            {
+              "id": 54,
+              "name": "Simulation",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [],
+              "type": "games"
+            },
+            {
+              "id": 244059,
+              "name": "Talking Tom & Friends",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [244236],
+              "type": "ip"
+            }
+          ],
+          "apps": 3,
+          "icon_url": "https://play-lh.googleusercontent.com/A-HDtH1YjGTlUKztcGhbdMAe3fuu_GHtUaQ7B7nxICSGYkPyMktO_JB1vElrT351u--3gIrzgK-VEomymxVGJw",
+          "name": "My Talking Tom 2",
+          "url": "",
+          "publisher_name": "",
+          "unitedPublisher": {
+            "id": 54580,
+            "name": "Outfit7 Limited",
+            "head_company_name": "Jinke Culture - Outfit7",
+            "headquarter": "CY",
+            "majority_of_employees_location": "SI",
+            "decision_makers_location": "SI",
+            "linkedin_headcount": 469,
+            "place": 48
+          },
+          "store_ids": [
+            "1_com.outfit7.mytalkingtom2",
+            "2_1337578317",
+            "3_1337578317"
+          ],
+          "store_application_ids": [
+            "com.outfit7.mytalkingtom2",
+            "1337578317"
+          ],
+          "score": 9131896,
+          "downloads": 5000000,
+          "revenue": 50000,
+          "store": [1, 2, 3],
+          "categories": [
+            "175", "209", "216", "88", "96", "109", "110", "1", "9", "22", "23", "68"
+          ],
+          "type": "united_application",
+          "support_url": ["https://talkingtomandfriends.com/support/"],
+          "support_email": ["support@outfit7.com"],
+          "website_url": [
+            "https://talkingtomandfriends.com/support/",
+            "https://talkingtomandfriends.com/apps"
+          ],
+          "releaseDate": "2018-09-28T00:00:00Z",
+          "release_date_info": {
+            "store": 1,
+            "store_application_id": "com.outfit7.mytalkingtom2",
+            "country": "AU"
+          },
+          "first_detected": "2018-09-29T18:04:16Z",
+          "last_release_date": "2025-11-10",
+          "min_data_date": "2018-09-29T00:00:00Z",
+          "last_sdks": [],
+          "first_app_ad": "2021-11-01",
+          "first_in_app_ad": "2022-08-27",
+          "has_asa_data": true,
+          "publisher_ad_data": {
+            "first_app_ad": "2021-11-01",
+            "first_in_app_ad": "2021-11-01"
+          },
+          "ratings": [
+            4.31, 4.07, 4.16, 4.4, 4.28, 4.15, 4.41, 4.45, 4.42, 4.27,
+            4.1, 4.34, 4.37, 4.05, 4.48, 4.14, 4.18, 4.51, 4.43, 4.17,
+            4.04, 4.36, 4.3, 4.21, 4.44, 4.38, 4.32, 4.2, 4.02, 4.24,
+            4.26, 4.47, 4.25, 4.29, 4.23, 4.33, 4.35, 4.11, 4.13, 4.39,
+            4.59, 4.4, 3.8, 4.5, 4.3, 4.2, 4.09, 3.6, 3.4, 4, 3.6,
+            4.2, 4.4, 4.59, 4.3, 3.8, 4, 4.5, 4.09, 3.4
+          ],
+          "removed_stores": [],
+          "overall_dau": 0,
+          "overall_mau": 0,
+          "has_web_shop": false,
+          "web_shops": [],
+          "web_shop_sdks": [],
+          "paid": false,
+          "pre_order": false,
+          "contains_ads": true,
+          "has_in_app_purchases": true,
+          "removed": false,
+          "has_revenue_distribution_data": false,
+          "apps_priority": [
+            {
+              "store": 1,
+              "store_application_id": "com.outfit7.mytalkingtom2",
+              "country": "US",
+              "store_url": "https://play.google.com/store/apps/details?gl=US&hl=en-US&id=com.outfit7.mytalkingtom2"
+            },
+            {
+              "store": 2,
+              "store_application_id": "1337578317",
+              "country": "US",
+              "store_url": "https://apps.apple.com/us/app/my-talking-tom-2/id1337578317"
+            },
+            {
+              "store": 3,
+              "store_application_id": "1337578317",
+              "country": "US",
+              "store_url": "https://apps.apple.com/us/app/my-talking-tom-2/id1337578317"
+            }
+          ]
+        }
+      ],
+      "publishers": []
+    }
+  },
+  "timestamp": "2025-11-19T13:04:13Z",
+  "comparison_with_previous_request": {
+    "previous_search": "6743617473",
+    "previous_cookies": "Sent with request",
+    "current_search": "1337578317",
+    "current_cookies": "NOT sent with request (credentials: 'omit')",
+    "result": "Both requests returned 200 OK. The API appears to work without authentication cookies for search requests."
+  },
+  "notes": [
+    "Request was made WITHOUT cookies using credentials: 'omit'",
+    "API still returned successful response (200 OK)",
+    "Search query: '1337578317' returned 1 application (My Talking Tom 2)",
+    "Response headers are similar to the previous request",
+    "Rate limit: 500 requests, 499 remaining",
+    "This suggests the search API endpoint does not require authentication cookies"
+  ]
+}
+

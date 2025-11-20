@@ -593,6 +593,7 @@ async def scrape_ads_transparency_page(
     unique_videos = extraction_results['unique_videos']
     videos_by_request = extraction_results['videos_by_request']
     app_store_id = extraction_results['app_store_id']
+    play_store_id = extraction_results['play_store_id']
     app_ids_from_base64 = extraction_results['app_ids_from_base64']
     extraction_method = extraction_results['extraction_method']
     all_videos = extraction_results['all_videos']
@@ -639,6 +640,7 @@ async def scrape_ads_transparency_page(
         
         # App Store
         'app_store_id': app_store_id,
+        'play_store_id': play_store_id,
         'app_ids_from_base64': app_ids_from_base64,
         
         # Funded By (sponsor company name)
@@ -1145,6 +1147,7 @@ async def scrape_ads_transparency_api_only(
             'videos': [],
             'video_count': 0,
             'app_store_id': None,
+            'play_store_id': None,
             'real_creative_id': creative_id,
             'method_used': 'api_only_failed',
             'duration_ms': (time.time() - start_time) * 1000,
@@ -1179,7 +1182,7 @@ async def scrape_ads_transparency_api_only(
     
     print(f"\n🔍 Extracted {len(found_fletch_renders)} fletch-render IDs from content.js URLs")
     
-    # Extract data (videos, App Store IDs)
+    # Extract data (videos, App Store IDs, Play Store IDs)
     extraction_results = _extract_data(
         content_js_responses,
         found_fletch_renders,  # FIXED: Now passing SET of IDs, not full URLs
@@ -1192,6 +1195,7 @@ async def scrape_ads_transparency_api_only(
     unique_videos = extraction_results['unique_videos']
     videos_by_request = extraction_results['videos_by_request']
     app_store_id = extraction_results['app_store_id']
+    play_store_id = extraction_results['play_store_id']
     app_ids_from_base64 = extraction_results['app_ids_from_base64']
     extraction_method = extraction_results['extraction_method']
     
@@ -1268,6 +1272,7 @@ async def scrape_ads_transparency_api_only(
         
         # App Store
         'app_store_id': app_store_id,
+        'play_store_id': play_store_id,
         'app_ids_from_base64': app_ids_from_base64,
         
         # Funded By

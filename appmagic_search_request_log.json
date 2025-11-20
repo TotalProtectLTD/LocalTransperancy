@@ -1,0 +1,175 @@
+{
+  "request": {
+    "url": "https://appmagic.rocks/api/v2/search?name=6743617473&limit=20",
+    "method": "GET",
+    "query_parameters": {
+      "name": "6743617473",
+      "limit": "20"
+    },
+    "note": "Request headers are automatically added by the browser. Typical headers include: Accept, Accept-Language, Accept-Encoding, Referer, User-Agent, Cookie, etc."
+  },
+  "cookies": {
+    "raw": "_gcl_au=1.1.1324459414.1763557221; dashly_session=4sq9el404t5lwwoa79hpsklbxi9e1tr8; dashly_session_started=1; dashly_device_guid=52881f8e-2acf-49f4-84ae-9be8f27012d4; dashly_uid=2109308970622517656; dashly_auth_token=user.2109308970622517656.7830-e4dd41f4662c0285e8163b41d6e.221bde05aa3296f9ac14b134b0809b8957bbc43379d48851; dashly_jwt_access=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdHQiOiJhY2Nlc3MiLCJleHAiOjE3NjM1NjA4MjQsImlhdCI6MTc2MzU1NzIyNCwianRpIjoiOWEyMzc2MDhkZGQ1NDJmOWI4NzAzZDg3MGI5MWVkMGYiLCJhY3QiOiJ3ZWJfdXNlciIsInJvbGVzIjpbInVzZXIuJGFwcF9pZDo3ODMwLiR1c2VyX2lkOjIxMDkzMDg5NzA2MjI1MTc2NTYiXSwiYXBwX2lkIjo3ODMwLCJ1c2VyX2lkIjoyMTA5MzA4OTcwNjIyNTE3NjU2fQ.-N7C_Ob0qXtjcXElKEjg3BLwRQmqfVfut56zMuLDr9s; dashly_realtime_services_transport=wss",
+    "parsed": {
+      "_gcl_au": "1.1.1324459414.1763557221",
+      "dashly_session": "4sq9el404t5lwwoa79hpsklbxi9e1tr8",
+      "dashly_session_started": "1",
+      "dashly_device_guid": "52881f8e-2acf-49f4-84ae-9be8f27012d4",
+      "dashly_uid": "2109308970622517656",
+      "dashly_auth_token": "user.2109308970622517656.7830-e4dd41f4662c0285e8163b41d6e.221bde05aa3296f9ac14b134b0809b8957bbc43379d48851",
+      "dashly_jwt_access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdHQiOiJhY2Nlc3MiLCJleHAiOjE3NjM1NjA4MjQsImlhdCI6MTc2MzU1NzIyNCwianRpIjoiOWEyMzc2MDhkZGQ1NDJmOWI4NzAzZDg3MGI5MWVkMGYiLCJhY3QiOiJ3ZWJfdXNlciIsInJvbGVzIjpbInVzZXIuJGFwcF9pZDo3ODMwLiR1c2VyX2lkOjIxMDkzMDg5NzA2MjI1MTc2NTYiXSwiYXBwX2lkIjo3ODMwLCJ1c2VyX2lkIjoyMTA5MzA4OTcwNjIyNTE3NjU2fQ.-N7C_Ob0qXtjcXElKEjg3BLwRQmqfVfut56zMuLDr9s",
+      "dashly_realtime_services_transport": "wss"
+    }
+  },
+  "response": {
+    "status": 200,
+    "statusText": "",
+    "headers": {
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9a0fe4f80c7f9317-TBS",
+      "content-encoding": "gzip",
+      "content-length": "1892",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Wed, 19 Nov 2025 13:01:07 GMT",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=CRtITKpOidRT7G1jK9ri4QsIJ23nb1cpw4duIqLi0dQ9XC4qnvP9YJnlxobWYsvxHb6Sfg2FVCAmc8GtcrtKgVe27nM6kRWS3v1tYHk%3D\"}]}",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept-Encoding",
+      "with-cache": "false",
+      "x-ratelimit-limit": "500",
+      "x-ratelimit-remaining": "499"
+    },
+    "data": {
+      "applications": [
+        {
+          "id": 16700512,
+          "tags": [
+            {
+              "id": 9,
+              "name": "Apps",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [],
+              "type": "domain"
+            },
+            {
+              "id": 115,
+              "name": "Tools",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [],
+              "type": "apps"
+            },
+            {
+              "id": 119,
+              "name": "Antivirus & Cleaner",
+              "priority": 0,
+              "status": 3,
+              "parent_ids": [115],
+              "type": "apps"
+            }
+          ],
+          "apps": 2,
+          "icon_url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/c9/df/48/c9df48e1-692c-7266-6183-674e32ff03f1/Placeholder.mill/0x514h.jpg",
+          "name": "ProClean: Phone Cleaner",
+          "url": "",
+          "publisher_name": "",
+          "unitedPublisher": {
+            "id": 5607207238,
+            "name": "Flyant SL",
+            "head_company_name": "",
+            "headquarter": null,
+            "majority_of_employees_location": null,
+            "decision_makers_location": null,
+            "linkedin_headcount": null,
+            "place": 27142
+          },
+          "countries": [
+            "EC", "TW", "BY", "DZ", "SE", "CG", "NO", "FR", "SA", "TH",
+            "PT", "IL", "CN", "GR", "MO", "UZ", "MX", "DO", "UG", "JO",
+            "ZM", "CY", "BB", "HU", "PK", "GT", "AU", "MY", "CZ", "PL",
+            "MZ", "CH", "LK", "OM", "US", "CM", "ID", "SV", "MM", "ES",
+            "BH", "LB", "IQ", "UA", "SG", "CL", "ML", "MA", "NZ", "NG",
+            "BO", "TZ", "NL", "FI", "IT", "MG", "BF", "CO", "AR", "KH",
+            "SN", "HK", "ZW", "PE", "BE", "DK", "ZA", "BJ", "RO", "JP",
+            "CA", "BR", "IN", "KR", "QA", "GH", "TR", "LY", "EG", "KE",
+            "DE", "PY", "PH", "CI", "AE", "AF", "IE", "RU", "TN", "KW",
+            "AT", "VE", "AZ", "VN", "BM", "SI", "LA", "KZ", "SK", "LV",
+            "AO", "GB"
+          ],
+          "store_ids": ["2_6743617473", "3_6743617473"],
+          "store_application_ids": ["6743617473"],
+          "score": 47571,
+          "downloads": 10000,
+          "revenue": 20000,
+          "store": [2, 3],
+          "categories": ["88", "173", "247", "1", "86", "248"],
+          "type": "united_application",
+          "support_url": ["https://flyant.co"],
+          "support_email": [],
+          "website_url": [],
+          "releaseDate": "2025-04-16T00:00:00Z",
+          "release_date_info": {
+            "store": 2,
+            "store_application_id": "6743617473",
+            "country": "US"
+          },
+          "first_detected": "2025-04-18T03:30:26Z",
+          "last_release_date": "2025-10-10",
+          "min_data_date": "2025-04-24T00:00:00Z",
+          "last_sdks": [],
+          "first_app_ad": "2025-05-02",
+          "has_asa_data": false,
+          "publisher_ad_data": {
+            "first_app_ad": "2025-05-02"
+          },
+          "ratings": [5, 4.3, 3.8, 2, 4, 1, 4.09, 3.7, 4.5, 3.5, 3, 3.5, 5, 3.8, 3.7, 3, 4.3, 2, 4, 1, 4.5, 4.09],
+          "removed_stores": [],
+          "overall_dau": 0,
+          "overall_mau": 0,
+          "has_web_shop": false,
+          "web_shops": [],
+          "web_shop_sdks": [],
+          "paid": false,
+          "pre_order": false,
+          "contains_ads": false,
+          "has_in_app_purchases": true,
+          "removed": false,
+          "has_revenue_distribution_data": false,
+          "apps_priority": [
+            {
+              "store": 2,
+              "store_application_id": "6743617473",
+              "country": "US",
+              "store_url": "https://apps.apple.com/us/app/proclean-phone-cleaner/id6743617473"
+            },
+            {
+              "store": 3,
+              "store_application_id": "6743617473",
+              "country": "US",
+              "store_url": "https://apps.apple.com/us/app/proclean-phone-cleaner/id6743617473"
+            }
+          ]
+        }
+      ],
+      "publishers": []
+    }
+  },
+  "performance": {
+    "duration_ms": 609.2,
+    "transfer_size_bytes": 2192,
+    "request_type": "xmlhttprequest"
+  },
+  "timestamp": "2025-11-19T13:01:07Z",
+  "notes": [
+    "Request was made via XMLHttpRequest (XHR)",
+    "Browser automatically adds standard headers (Accept, Accept-Language, Referer, User-Agent, etc.)",
+    "Cookies are automatically included in the Cookie header",
+    "Response is gzip compressed (content-encoding: gzip)",
+    "Rate limit: 500 requests, 499 remaining",
+    "Search query: '6743617473' returned 1 application (ProClean: Phone Cleaner)"
+  ]
+}
+
+

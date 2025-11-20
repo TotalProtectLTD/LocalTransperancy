@@ -70,7 +70,8 @@ from google_ads_api_analysis import (
 # Import data extraction functions
 from google_ads_extractors import (
     extract_youtube_videos_from_text,
-    extract_app_store_id_from_text
+    extract_app_store_id_from_text,
+    extract_play_store_id_from_text
 )
 
 # Import debug functions
@@ -391,12 +392,13 @@ def _extract_data(
     debug_appstore: bool
 ) -> Dict[str, Any]:
     """
-    Extract YouTube video IDs and App Store IDs from content.js files.
+    Extract YouTube video IDs, App Store IDs, and Play Store IDs from content.js files.
     
     Processes matched content.js files to extract:
     1. YouTube video IDs: From ytimg.com thumbnails and video_id fields
     2. App Store IDs: From Apple App Store URLs (apps.apple.com, itunes.apple.com)
-    3. App IDs from base64: From base64-encoded ad parameters (only if "App Store" text present)
+    3. Play Store IDs: From Google Play Store URLs (play.google.com/store/apps/details?id=...)
+    4. App IDs from base64: From base64-encoded ad parameters (only if "App Store" text present)
     
     Handles three extraction scenarios:
     1. Fletch-render method: Extract from matched dynamic content.js files
@@ -416,6 +418,7 @@ def _extract_data(
             - 'unique_videos': List of unique YouTube video IDs (11 characters each)
             - 'videos_by_request': List of dicts with 'url' and 'videos' per content.js
             - 'app_store_id': App Store ID string (9-10 digits) or None
+            - 'play_store_id': Play Store package ID string (e.g., 'com.example.app') or None
             - 'app_ids_from_base64': List of app IDs (10-13 digits) extracted from base64
             - 'extraction_method': Method used ('fletch-render', 'static-content', 'none')
             - 'all_videos': List of all videos before deduplication (for statistics)
@@ -456,6 +459,7 @@ def _extract_data(
     all_videos = []
     videos_by_request = []
     app_store_id = None
+    play_store_id = None
     app_ids_from_base64 = set()  # Collect app IDs extracted from base64
     extraction_method = None
     
@@ -522,6 +526,14 @@ def _extract_data(
                                 pattern_description
                             )
                 
+                # Extract Play Store ID if not already found
+                # Only need one Play Store ID per creative (first match wins)
+                if not play_store_id:
+                    result = extract_play_store_id_from_text(text)
+                    if result:
+                        play_store_id, pattern_description = result
+                        print(f"  Found Play Store ID: {play_store_id} in fletch-render-{fr_match.group(1)[:15]}...")
+                
                 # Extract app IDs from base64 in content.js response
                 # This handles app IDs hidden in base64-encoded ad parameters
                 # Only analyze if content.js contains "App Store" text
@@ -553,6 +565,11 @@ def _extract_data(
     else:
         print("\n⚠️  No App Store ID found")
     
+    if play_store_id:
+        print(f"\n✅ Play Store ID: {play_store_id}")
+    else:
+        print("\n⚠️  No Play Store ID found")
+    
     # Display base64-extracted app IDs
     if app_ids_from_base64:
         print(f"\n✅ App IDs from base64: {len(app_ids_from_base64)} found")
@@ -563,6 +580,7 @@ def _extract_data(
         'unique_videos': unique_videos,
         'videos_by_request': videos_by_request,
         'app_store_id': app_store_id,
+        'play_store_id': play_store_id,
         'app_ids_from_base64': list(app_ids_from_base64),  # Convert set to list for JSON serialization
         'extraction_method': extraction_method,
         'all_videos': all_videos

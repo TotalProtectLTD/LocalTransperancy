@@ -318,6 +318,13 @@ def send_payload(payload: Dict[str, Any], secret: str, client: httpx.Client) -> 
 def process_single_row(row: Dict[str, Any], secret: str, client: httpx.Client, skip_empty_videos: bool) -> Tuple[int, bool, Optional[str]]:
     """Process a single row and return (row_id, success, error_message)."""
     row_id = row["id"]
+    
+    # Special case: if appstore_id is 6667117056, skip API call and mark as synced
+    appstore_id = row.get("appstore_id")
+    if appstore_id and str(appstore_id).strip() == "6667117056":
+        mark_synced(row_id)
+        return (row_id, True, None)
+    
     payload = build_payload(row)
     
     if skip_empty_videos and not payload.get("youtube_video_ids"):

@@ -1,0 +1,74 @@
+========================================
+Export Chrome Cookies for Cursor Browser
+========================================
+
+METHOD 1: Direct Export from Chrome Database (Recommended)
+-----------------------------------------------------------
+1. Close Chrome completely (important!)
+
+2. Run the export script:
+   python export_chrome_cookies.py google.com
+
+   This will:
+   - Read Chrome's cookie database
+   - Export cookies for google.com domain
+   - Create cookies.json and load_cookies.js
+
+3. Use in Cursor:
+   - Navigate to accounts.google.com first
+   - Use browser_evaluate with code from load_cookies.js
+   - Then navigate to your target page
+
+
+METHOD 2: Using Chrome Extension
+---------------------------------
+1. Install "Cookie-Editor" extension in Chrome
+   https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Click extension icon → Export → JSON
+
+3. Save to cookies.json
+
+4. Convert to JavaScript:
+   python load_cookies_cursor_browser.py cookies.json
+
+5. Use browser_evaluate in Cursor with the generated code
+
+
+METHOD 3: Manual Export via DevTools
+-------------------------------------
+1. Open Chrome DevTools (F12)
+2. Go to Application tab → Cookies
+3. Manually copy cookie values
+4. Create JSON file with format:
+   [
+     {
+       "name": "SESSION_ID",
+       "value": "abc123",
+       "domain": ".google.com",
+       "path": "/",
+       "secure": true,
+       "httpOnly": false,
+       "sameSite": "Lax"
+     }
+   ]
+5. Run: python load_cookies_cursor_browser.py cookies.json
+
+
+USAGE IN CURSOR:
+----------------
+1. Navigate to the domain first:
+   browser_navigate("https://accounts.google.com")
+
+2. Load cookies using browser_evaluate:
+   browser_evaluate(function="() => { /* paste code from load_cookies.js */ }")
+
+3. Navigate to your target page:
+   browser_navigate("https://mail.google.com")
+
+
+TROUBLESHOOTING:
+----------------
+- If export fails: Make sure Chrome is completely closed
+- If cookies don't work: Check domain matches (e.g., .google.com vs google.com)
+- Session cookies expire quickly - re-export if needed

@@ -21,7 +21,7 @@ if launchctl list | grep -q "$LABEL"; then
     echo "✅ Agent is loaded"
     
     # Show schedule
-    echo "📅 Schedule: Every 10 minutes"
+    echo "📅 Schedule: Every 30 seconds"
     echo "   Arguments: --limit 10"
     
     # Check last log modification time
@@ -57,7 +57,7 @@ if launchctl list | grep -q "$LABEL"; then
         fi
     else
         echo "ℹ️  No log file found (agent hasn't run yet)"
-        echo "   First run will be 10 minutes after installation"
+        echo "   First run will be 30 seconds after installation"
     fi
 else
     echo "❌ Agent is not loaded"
