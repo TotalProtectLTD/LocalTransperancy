@@ -807,7 +807,8 @@ async def worker(
     stats_lock: asyncio.Lock,
     show_cache_stats: bool = True,
     batch_size: int = None,
-    use_partial_proxy: bool = False
+    use_partial_proxy: bool = False,
+    max_urls: Optional[int] = None
 ):
     """
     Worker coroutine that continuously processes BATCHES of creatives from database.
@@ -822,6 +823,7 @@ async def worker(
         show_cache_stats: If True, display cache statistics
         batch_size: Number of creatives per batch (default: from DEFAULT_BATCH_SIZE config)
         use_partial_proxy: If True, use proxy only for HTML+API, bypass for content.js
+        max_urls: Maximum URLs to process (None = continuous mode, wait for new rows)
     """
     global proxy_acquire_lock
     
@@ -831,24 +833,36 @@ async def worker(
     while True:
         async with semaphore:
             try:
-                # Check remaining creatives before fetching (respects max_urls)
-                async with stats_lock:
-                    remaining = stats['total_pending'] - stats['processed']
-                
-                if remaining <= 0:
-                    # Reached max_urls limit or no more pending
-                    break
-                
-                # Adjust batch size to not exceed max_urls limit
-                actual_batch_size = min(batch_size, remaining)
+                # Check remaining creatives before fetching (only if max_urls is set)
+                if max_urls is not None:
+                    async with stats_lock:
+                        remaining = stats['total_pending'] - stats['processed']
+                    
+                    if remaining <= 0:
+                        # Reached max_urls limit
+                        break
+                    
+                    # Adjust batch size to not exceed max_urls limit
+                    actual_batch_size = min(batch_size, remaining)
+                else:
+                    # No limit - use full batch size
+                    actual_batch_size = batch_size
                 
                 # Get next batch and atomically mark as processing (thread-safe)
                 # Uses SELECT FOR UPDATE SKIP LOCKED to prevent race conditions
                 creative_batch = get_pending_batch_and_mark_processing(batch_size=actual_batch_size)
                 
                 if not creative_batch:
-                    # No more pending URLs in database
-                    break
+                    # No pending URLs in database
+                    if max_urls is None:
+                        # Continuous mode: wait for new rows to be added
+                        print(f"  [Worker {worker_id}] 💤 No pending URLs, sleeping 60s...")
+                        sys.stdout.flush()
+                        await asyncio.sleep(60)
+                        continue
+                    else:
+                        # Limited mode: stop when done
+                        break
                 
                 # Acquire proxy from API (serialized with lock - one worker at a time)
                 async with proxy_acquire_lock:
@@ -978,7 +992,7 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     
     Args:
         max_concurrent: Maximum number of concurrent workers (each processes batches)
-        max_urls: Maximum number of URLs to process (None for unlimited)
+        max_urls: Maximum number of URLs to process (None = continuous mode: wait for new rows when database is empty)
         show_cache_stats: If True, display cache statistics (default: True)
         batch_size: Number of creatives per batch (default: from DEFAULT_BATCH_SIZE config)
         use_partial_proxy: If True, use proxy only for HTML+API, bypass for content.js (saves ~70% proxy bandwidth)
@@ -1020,7 +1034,12 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     print(f"\nStress Test Configuration:")
     print(f"  Max concurrent: {max_concurrent} workers")
     print(f"  Batch size:     {batch_size} creatives per batch")
-    print(f"  URLs to process: {total_pending}")
+    if max_urls is None:
+        print(f"  Mode:           CONTINUOUS (runs forever, waits for new rows)")
+        print(f"  URLs pending:   {total_pending} (will process more as they're added)")
+    else:
+        print(f"  Mode:           LIMITED (stops after {max_urls} URLs)")
+        print(f"  URLs to process: {total_pending}")
     print(f"  Optimization:   Session reuse (1 HTML + {batch_size-1} API-only per batch)")
     print(f"  Bandwidth:      ~181 KB/creative (65% savings vs 524 KB)")
     print(f"  Proxy source:   API-based (MagicTransparency API)")
@@ -1068,7 +1087,7 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     try:
         # Create worker tasks
         workers = [
-            worker(i, semaphore, stats, stats_lock, show_cache_stats, batch_size, use_partial_proxy)
+            worker(i, semaphore, stats, stats_lock, show_cache_stats, batch_size, use_partial_proxy, max_urls)
             for i in range(max_concurrent)
         ]
         
@@ -1130,10 +1149,10 @@ PROXY SYSTEM:
   - Automatic proxy rotation handled by API
 
 Examples:
-  # Process all pending URLs with 10 concurrent workers
+  # Continuous mode: runs forever, waits for new rows (NO --max-urls)
   %(prog)s --max-concurrent 10
   
-  # Process 100 URLs with 20 concurrent workers
+  # Limited mode: process exactly 100 URLs then stop
   %(prog)s --max-concurrent 20 --max-urls 100
   
   # Custom batch size (default: 20)
@@ -1142,7 +1161,7 @@ Examples:
   # Partial proxy mode (HTML+API only, content.js direct)
   %(prog)s --max-concurrent 10 --partial-proxy
   
-  # High concurrency (careful with rate limits!)
+  # High concurrency continuous mode (careful with rate limits!)
   %(prog)s --max-concurrent 50
         """
     )
@@ -1150,7 +1169,7 @@ Examples:
     parser.add_argument('--max-concurrent', type=int, default=DEFAULT_MAX_CONCURRENT,
                         help=f'Maximum number of concurrent workers (default: {DEFAULT_MAX_CONCURRENT})')
     parser.add_argument('--max-urls', type=int, 
-                        help='Maximum number of URLs to process (default: all pending)')
+                        help='Maximum number of URLs to process (default: continuous mode - runs forever, waits for new rows when database is empty)')
     parser.add_argument('--batch-size', type=int, default=DEFAULT_BATCH_SIZE,
                         help=f'Number of creatives per batch (default: {DEFAULT_BATCH_SIZE})')
     parser.add_argument('--partial-proxy', action='store_true',
