@@ -27,7 +27,7 @@ touch "$LOCKFILE"
     cd "$PROJECT_DIR" || exit 1
     
     # Run the script with default settings (headless, limit 1000, batch-size 50)
-    /usr/bin/python3 "$PROJECT_DIR/appmagic_fetcher.py" --headless --limit 1000 --batch-size 50
+    /usr/bin/python3 "$PROJECT_DIR/appmagic_fetcher.py" --headless --limit 1000 --batch-size 50 --use-existing-chrome
     
     EXIT_CODE=$?
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Finished with exit code: $EXIT_CODE"

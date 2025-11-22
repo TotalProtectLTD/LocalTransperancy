@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install appmagic_metrics.py to cron (every 10 minutes)
+# Install appmagic_metrics.py to cron (every 5 minutes)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -31,8 +31,8 @@ cat > "$SCRIPT_DIR/crontab-new.txt" << EOF
 
 $CURRENT_CRON
 
-# Run appmagic_metrics.py every 10 minutes (with flock to prevent overlap)
-*/10 * * * * $PROJECT_DIR/scheduler/run-appmagic-metrics.sh >> $LOGS_DIR/appmagic-metrics.log 2>> $LOGS_DIR/appmagic-metrics-error.log
+# Run appmagic_metrics.py every 5 minutes (with flock to prevent overlap)
+*/5 * * * * $PROJECT_DIR/scheduler/run-appmagic-metrics.sh >> $LOGS_DIR/appmagic-metrics.log 2>> $LOGS_DIR/appmagic-metrics-error.log
 EOF
 
 # Install new crontab
@@ -41,7 +41,7 @@ crontab "$SCRIPT_DIR/crontab-new.txt"
 echo "✅ Cron jobs installed successfully!"
 echo ""
 echo "Scheduled jobs:"
-echo "  - appmagic_metrics.py: Every 10 minutes (overlap-safe)"
+echo "  - appmagic_metrics.py: Every 5 minutes (overlap-safe)"
 echo ""
 echo "Logs:"
 echo "  - Output: $LOGS_DIR/appmagic-metrics.log"
@@ -53,7 +53,7 @@ echo "  Edit:   crontab -e"
 echo "  Remove: crontab -r"
 echo ""
 echo "Next steps:"
-echo "  - Wait 10 minutes for first appmagic_metrics.py run"
+echo "  - Wait 5 minutes for first appmagic_metrics.py run"
 echo "  - View status: ./scheduler/status-appmagic-metrics.sh"
 echo "  - View logs: tail -f $LOGS_DIR/appmagic-metrics.log"
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Cron wrapper for appmagic_metrics.py
 # Fetches AppMagic metrics for apps
-# Runs every 10 minutes
+# Runs every 5 minutes
 
 # Set PATH explicitly for cron
 export PATH="/opt/homebrew/opt/util-linux/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -26,8 +26,8 @@ touch "$LOCKFILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting appmagic_metrics.py"
     cd "$PROJECT_DIR" || exit 1
     
-    # Run the script with default settings (headless, limit 10, use browser profile)
-    /usr/bin/python3 "$PROJECT_DIR/appmagic_metrics.py" --headless --limit 10 --use-browser-profile
+    # Run the script with default settings (headless, limit 30, use existing Chrome)
+    /usr/bin/python3 "$PROJECT_DIR/appmagic_metrics.py" --headless --limit 30 --use-existing-chrome
     
     EXIT_CODE=$?
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Finished with exit code: $EXIT_CODE"

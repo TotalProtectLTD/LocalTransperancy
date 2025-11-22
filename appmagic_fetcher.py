@@ -18,6 +18,7 @@ Usage:
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -32,6 +33,13 @@ except ImportError:
     print("❌ SeleniumBase is not installed!")
     print("Install it with: pip install seleniumbase")
     sys.exit(1)
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    SELENIUM_AVAILABLE = False
 
 
 # Configuration
@@ -58,6 +66,51 @@ def load_secret_from_file() -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def check_chrome_debug_running(chrome_debug_port: int = 9222) -> bool:
+    """Check if Chrome is running with remote debugging enabled."""
+    try:
+        response = requests.get(f"http://localhost:{chrome_debug_port}/json", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
+
+
+def start_chrome_debug(chrome_debug_port: int = 9222) -> bool:
+    """Start Chrome with remote debugging enabled."""
+    chrome_debug_dir = os.path.expanduser("~/Library/Application Support/Google/Chrome-Debug")
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    
+    # Create debug profile directory if it doesn't exist
+    os.makedirs(chrome_debug_dir, exist_ok=True)
+    
+    try:
+        # Start Chrome in background
+        subprocess.Popen(
+            [
+                chrome_path,
+                f"--remote-debugging-port={chrome_debug_port}",
+                f"--user-data-dir={chrome_debug_dir}"
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        # Wait for Chrome to start
+        print("⏳ Waiting for Chrome to start...")
+        for i in range(10):  # Wait up to 10 seconds
+            time.sleep(1)
+            if check_chrome_debug_running(chrome_debug_port):
+                print(f"✅ Chrome started successfully on port {chrome_debug_port}")
+                return True
+        
+        print("❌ Chrome started but debug port not accessible")
+        return False
+        
+    except Exception as e:
+        print(f"❌ Failed to start Chrome: {e}")
+        return False
 
 
 def get_missing_appstore_ids(api_token: str, limit: int = DEFAULT_LIMIT, exclude_games: bool = True) -> Dict[str, Any]:
@@ -101,6 +154,104 @@ def get_missing_appstore_ids(api_token: str, limit: int = DEFAULT_LIMIT, exclude
         if hasattr(e, 'response') and e.response is not None:
             print(f"   Response: {e.response.text}")
         raise
+
+
+def extract_appmagic_data_selenium(appstore_id: str, driver) -> Optional[Dict[str, Any]]:
+    """
+    Search AppMagic for appstore_id and extract appmagic_appid and appmagic_url using Selenium.
+    For use with existing Chrome instance.
+    """
+    url = f"https://appmagic.rocks/api/v2/search?name={appstore_id}&limit=20"
+    
+    try:
+        response_data = driver.execute_async_script(f"""
+            var callback = arguments[arguments.length - 1];
+            var url = '{url}';
+            fetch(url, {{
+                method: 'GET',
+                headers: {{
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Origin': 'https://appmagic.rocks',
+                    'Referer': 'https://appmagic.rocks/top-charts/apps',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin'
+                }}
+            }})
+            .then(response => {{
+                return response.text().then(text => {{
+                    callback({{
+                        status: response.status,
+                        body: text
+                    }});
+                }});
+            }})
+            .catch(error => {{
+                callback({{
+                    error: error.toString()
+                }});
+            }});
+        """)
+        
+        if not isinstance(response_data, dict):
+            return None
+        
+        if 'error' in response_data:
+            return None
+        
+        if response_data.get('status') != 200:
+            return None
+        
+        try:
+            response_json = json.loads(response_data['body'])
+        except json.JSONDecodeError:
+            return None
+        
+        # Extract data from response
+        if 'data' in response_json:
+            response_json = response_json['data']
+        
+        applications = response_json.get('applications', [])
+        if not applications:
+            return None
+        
+        app = applications[0]
+        appmagic_appid = app.get('id')
+        if appmagic_appid is None:
+            return None
+        
+        try:
+            appmagic_appid = int(appmagic_appid)
+        except (ValueError, TypeError):
+            return None
+        
+        # Extract appmagic_url
+        appmagic_url = None
+        apps_priority = app.get('apps_priority', [])
+        
+        for app_priority in apps_priority:
+            store_url = app_priority.get('store_url', '')
+            if 'apps.apple.com' in store_url:
+                match = re.search(r'/app/([^/]+)/id\d+', store_url)
+                if match:
+                    appmagic_url = match.group(1).strip()
+                    if appmagic_url:
+                        break
+        
+        if not appmagic_url:
+            return {
+                "appmagic_appid": appmagic_appid,
+                "appmagic_url": None
+            }
+        
+        return {
+            "appmagic_appid": appmagic_appid,
+            "appmagic_url": appmagic_url
+        }
+    
+    except Exception:
+        return None
 
 
 def extract_appmagic_data(appstore_id: str, sb: SB) -> Optional[Dict[str, Any]]:
@@ -267,12 +418,143 @@ def bulk_update_apps(api_token: str, updates: List[Dict[str, Any]]) -> Dict[str,
         raise
 
 
+def process_with_existing_chrome(
+    appstore_ids: List[str],
+    api_token: str,
+    batch_size: int,
+    chrome_debug_port: int = 9222,
+    auto_start_chrome: bool = True
+) -> Dict[str, Any]:
+    """
+    Process appstore_ids using existing Chrome instance.
+    """
+    if not SELENIUM_AVAILABLE:
+        print("❌ Selenium is required for existing Chrome connection")
+        return {"error": "Selenium not available"}
+    
+    # Check if Chrome is running, start if needed
+    if not check_chrome_debug_running(chrome_debug_port):
+        if auto_start_chrome:
+            print(f"🔍 Chrome debug not running on port {chrome_debug_port}")
+            print("🚀 Starting Chrome with remote debugging...")
+            if not start_chrome_debug(chrome_debug_port):
+                return {"error": "Failed to start Chrome"}
+        else:
+            print(f"❌ Chrome debug not running on port {chrome_debug_port}")
+            return {"error": "Chrome not running"}
+    else:
+        print(f"✅ Chrome debug already running on port {chrome_debug_port}")
+    
+    try:
+        # Connect to existing Chrome
+        chrome_options = ChromeOptions()
+        chrome_options.add_experimental_option("debuggerAddress", f"127.0.0.1:{chrome_debug_port}")
+        
+        print("🌐 Connecting to existing Chrome instance...")
+        driver = webdriver.Chrome(options=chrome_options)
+        print("✅ Connected to existing Chrome!")
+        
+        # Navigate to AppMagic if not already there
+        current_url = driver.current_url
+        if "appmagic.rocks" not in current_url:
+            print("🌐 Navigating to AppMagic...")
+            driver.get("https://appmagic.rocks/top-charts/apps")
+            time.sleep(3)
+        else:
+            print(f"✅ Already on AppMagic: {current_url}")
+        
+        stats = {
+            "total": len(appstore_ids),
+            "processed": 0,
+            "found": 0,
+            "not_found": 0,
+            "errors": 0,
+            "updated": 0,
+            "update_failed": 0
+        }
+        
+        updates_batch = []
+        
+        for i, appstore_id in enumerate(appstore_ids, 1):
+            print(f"\n[{i}/{len(appstore_ids)}] Processing appstore_id: {appstore_id}")
+            
+            # Extract AppMagic data using existing Chrome
+            try:
+                appmagic_data = extract_appmagic_data_selenium(appstore_id, driver)
+            except Exception as e:
+                print(f"   ❌ Exception while extracting data: {e}")
+                stats["errors"] += 1
+                stats["processed"] += 1
+                continue
+            
+            stats["processed"] += 1
+            
+            if appmagic_data is None:
+                stats["not_found"] += 1
+                print(f"   ❌ Not found in AppMagic")
+                continue
+            
+            if appmagic_data.get("appmagic_url") is None:
+                stats["not_found"] += 1
+                print(f"   ⚠️  Found appmagic_appid={appmagic_data['appmagic_appid']} but no appmagic_url")
+                continue
+            
+            stats["found"] += 1
+            print(f"   ✅ Found: appmagic_appid={appmagic_data['appmagic_appid']}, appmagic_url={appmagic_data['appmagic_url']}")
+            
+            # Add to batch
+            updates_batch.append({
+                "appstore_id": appstore_id,
+                "appmagic_appid": str(appmagic_data["appmagic_appid"]),
+                "appmagic_url": appmagic_data["appmagic_url"]
+            })
+            
+            # Send bulk update when batch is full
+            if len(updates_batch) >= batch_size:
+                try:
+                    result = bulk_update_apps(api_token, updates_batch)
+                    stats["updated"] += result.get("succeeded", 0)
+                    stats["update_failed"] += result.get("failed", 0)
+                    updates_batch = []
+                except Exception as e:
+                    print(f"❌ Error in bulk update: {e}")
+                    stats["errors"] += 1
+                    stats["update_failed"] += len(updates_batch)
+                    updates_batch = []
+            
+            # Small delay to avoid rate limiting
+            time.sleep(0.5)
+        
+        # Send remaining updates
+        if updates_batch:
+            try:
+                result = bulk_update_apps(api_token, updates_batch)
+                stats["updated"] += result.get("succeeded", 0)
+                stats["update_failed"] += result.get("failed", 0)
+            except Exception as e:
+                print(f"❌ Error in final bulk update: {e}")
+                stats["errors"] += 1
+                stats["update_failed"] += len(updates_batch)
+        
+        print("\n✅ Processing complete (keeping Chrome open)")
+        
+    except Exception as e:
+        print(f"❌ Error connecting to Chrome: {e}")
+        print(f"   Make sure Chrome is running with remote debugging")
+        return {"error": str(e)}
+    
+    return stats
+
+
 def process_appstore_ids(
     appstore_ids: List[str],
     api_token: str,
     cookies_file: str = COOKIES_FILE,
     batch_size: int = DEFAULT_BATCH_SIZE,
-    headless: bool = True
+    headless: bool = True,
+    use_existing_chrome: bool = False,
+    chrome_debug_port: int = 9222,
+    auto_start_chrome: bool = True
 ) -> Dict[str, Any]:
     """
     Process appstore_ids and update server with AppMagic data.
@@ -283,10 +565,23 @@ def process_appstore_ids(
         cookies_file: Path to AppMagic cookies JSON file
         batch_size: Number of apps to process before sending bulk update
         headless: Run browser in headless mode
+        use_existing_chrome: Connect to existing Chrome with remote debugging
+        chrome_debug_port: Port for Chrome remote debugging
+        auto_start_chrome: Auto-start Chrome if not running
     
     Returns:
         Dict with processing statistics
     """
+    # Use existing Chrome if requested
+    if use_existing_chrome:
+        return process_with_existing_chrome(
+            appstore_ids,
+            api_token,
+            batch_size,
+            chrome_debug_port,
+            auto_start_chrome
+        )
+    
     # Load cookies
     cookies_path = Path(cookies_file)
     if not cookies_path.exists():
@@ -428,6 +723,9 @@ def main():
     parser.add_argument("--headless", action="store_true", default=True, help="Run browser in headless mode (default: True)")
     parser.add_argument("--visible", action="store_false", dest="headless", help="Show browser window")
     parser.add_argument("--cookies-file", type=str, default=COOKIES_FILE, help=f"Path to cookies file (default: {COOKIES_FILE})")
+    parser.add_argument("--use-existing-chrome", action="store_true", help="Connect to existing Chrome with remote debugging (BEST - no Cloudflare checks!)")
+    parser.add_argument("--chrome-debug-port", type=int, default=9222, help="Chrome remote debugging port (default: 9222)")
+    parser.add_argument("--no-auto-start-chrome", action="store_true", help="Don't automatically start Chrome if not running")
     parser.add_argument("--secret", type=str, help="Shared secret override (else INCOMING_SHARED_SECRET constant)")
     parser.add_argument("--token", type=str, help="API token (overrides MAGIC_TRANSPARENCY_TOKEN env var or shared secret)")
     
@@ -476,7 +774,10 @@ def main():
             api_token=api_token,
             cookies_file=args.cookies_file,
             batch_size=args.batch_size,
-            headless=args.headless
+            headless=args.headless,
+            use_existing_chrome=args.use_existing_chrome,
+            chrome_debug_port=args.chrome_debug_port,
+            auto_start_chrome=not args.no_auto_start_chrome
         )
         
         # Print summary

@@ -17,6 +17,7 @@ Usage:
 
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -46,7 +47,7 @@ except ImportError:
 MAGIC_TRANSPARENCY_API = "https://magictransparency.com/api/appmagic"
 APPMAGIC_METRICS_ENDPOINT = "https://appmagic.rocks/api/v2/charts/united-applications"
 APPMAGIC_AUTH_TOKEN = "r723d4mLh_zAXVFyjY5vBOCwmgsHdZO-"
-DEFAULT_LIMIT = 10
+DEFAULT_LIMIT = 30
 COOKIES_FILE = "appmagic_cookies_fresh.json"
 
 # Default shared secret (can be overridden by env var, config file, or --secret flag)
@@ -225,6 +226,12 @@ def process_with_existing_chrome(
                 stats["processed"] += 1
                 stats["failed"] += 1
                 continue
+            
+            # Random delay before request (3-7 seconds) to avoid rate limiting
+            if i > 1:  # Skip delay for first app
+                delay = random.uniform(3, 7)
+                print(f"   ⏳ Waiting {delay:.1f} seconds before request...")
+                time.sleep(delay)
             
             # Fetch metrics using existing Chrome
             try:
@@ -646,6 +653,12 @@ def process_apps(
                 stats["processed"] += 1
                 stats["failed"] += 1
                 continue
+            
+            # Random delay before request (3-7 seconds) to avoid rate limiting
+            if i > 1:  # Skip delay for first app
+                delay = random.uniform(3, 7)
+                print(f"   ⏳ Waiting {delay:.1f} seconds before request...")
+                time.sleep(delay)
             
             # Fetch metrics
             try:

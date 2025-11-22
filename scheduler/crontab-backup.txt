@@ -1,4 +1,7 @@
 # LocalTransperancy Scheduled Jobs - Projects Location
+# Updated: Fri Nov 21 18:31:13 +0400 2025
+
+# LocalTransperancy Scheduled Jobs - Projects Location
 # Updated: Mon Nov 17 23:50:00 +04 2025
 
 # Run bigquery_advertisers_postgres.py daily at 11:00 PM
@@ -12,3 +15,6 @@
 
 # Run parser_of_advertiser.py every 1 minute (with flock to prevent overlap)
 * * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser-error.log
+
+# Run appmagic_fetcher.py every 15 minutes (with flock to prevent overlap)
+*/15 * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-appmagic-fetcher.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-fetcher.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-fetcher-error.log

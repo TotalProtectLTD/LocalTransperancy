@@ -1,4 +1,7 @@
 # LocalTransperancy Scheduled Jobs - Projects Location
+# Updated: Sat Nov 22 20:47:40 +0400 2025
+
+# LocalTransperancy Scheduled Jobs - Projects Location
 # Updated: Fri Nov 21 18:31:13 +0400 2025
 
 # LocalTransperancy Scheduled Jobs - Projects Location
@@ -18,3 +21,6 @@
 
 # Run appmagic_fetcher.py every 15 minutes (with flock to prevent overlap)
 */15 * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-appmagic-fetcher.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-fetcher.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-fetcher-error.log
+
+# Run appmagic_metrics.py every 5 minutes (with flock to prevent overlap)
+*/5 * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-appmagic-metrics.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-metrics.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/appmagic-metrics-error.log
