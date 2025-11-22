@@ -7,8 +7,8 @@
 # Run bigquery_creatives_postgres.py daily at 11:30 PM with yesterday's date
 30 23 * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-bigquery-creatives.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-creatives.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/bigquery-creatives-error.log
 
-# Run send_incoming_creative.py every 4 minutes
-*/4 * * * * /Users/rostoni/bin/cron-send-creatives.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives-error.log
+# Run send_incoming_creative.py every 1 minute (batch 30)
+* * * * * /Users/rostoni/bin/cron-send-creatives.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/send-creatives-error.log
 
 # Run parser_of_advertiser.py every 1 minute (with flock to prevent overlap)
 * * * * * /Users/rostoni/Projects/LocalTransperancy/scheduler/run-parser-advertiser.sh >> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser.log 2>> /Users/rostoni/Projects/LocalTransperancy/scheduler/logs/parser-advertiser-error.log
