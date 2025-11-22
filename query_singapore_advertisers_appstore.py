@@ -96,3 +96,4 @@ def query_singapore_advertisers_with_appstore():
 if __name__ == "__main__":
     query_singapore_advertisers_with_appstore()
 
+

@@ -218,3 +218,4 @@ The bug is **NOT** in how the 1 creative is marked - that works correctly. The b
 
 **Fix Required**: `scrape_batch_optimized()` should return results for ALL creatives in the batch, even if the first one fails.
 
+

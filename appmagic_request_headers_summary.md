@@ -98,3 +98,4 @@ curl "https://appmagic.rocks/api/v2/search?name=1337578317&limit=20" \
 However, for best compatibility, include the standard headers listed above.
 
 
+

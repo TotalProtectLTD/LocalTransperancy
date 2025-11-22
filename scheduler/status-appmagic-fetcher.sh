@@ -66,3 +66,4 @@ echo "  ./scheduler/status-appmagic-fetcher.sh    # This status check"
 echo "  tail -f $LOGS_DIR/appmagic-fetcher.log   # Watch live output"
 echo "  tail -f $LOGS_DIR/appmagic-fetcher-error.log  # Watch errors"
 
+

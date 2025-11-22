@@ -160,3 +160,4 @@ def count_advertisers_by_country():
 if __name__ == "__main__":
     count_advertisers_by_country()
 
+

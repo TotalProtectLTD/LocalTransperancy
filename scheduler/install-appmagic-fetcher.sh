@@ -57,3 +57,4 @@ echo "  - Wait 15 minutes for first appmagic_fetcher.py run"
 echo "  - View status: ./scheduler/status-appmagic-fetcher.sh"
 echo "  - View logs: tail -f $LOGS_DIR/appmagic-fetcher.log"
 
+
