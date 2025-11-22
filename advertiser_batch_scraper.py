@@ -216,7 +216,7 @@ def get_advertisers_batch_and_mark_processing(batch_size: int = None) -> List[Di
     Get a batch of advertisers and atomically mark them as processing.
     
     Selects advertisers where:
-    - name contains "Apps" (case-insensitive)
+    - country = 'HK' (Hong Kong)
     - status is NULL, 'failed', or 'pending' (NOT 'processing')
     
     Uses SELECT FOR UPDATE SKIP LOCKED to prevent race conditions where multiple
@@ -239,7 +239,7 @@ def get_advertisers_batch_and_mark_processing(batch_size: int = None) -> List[Di
             WITH selected AS (
                 SELECT advertiser_id, advertiser_name
                 FROM advertisers
-                WHERE advertiser_name ILIKE %s
+                WHERE country = %s
                   AND (status IS NULL OR status IN ('failed', 'pending'))
                 ORDER BY advertiser_id
                 LIMIT %s
@@ -250,7 +250,7 @@ def get_advertisers_batch_and_mark_processing(batch_size: int = None) -> List[Di
             FROM selected
             WHERE advertisers.advertiser_id = selected.advertiser_id
             RETURNING advertisers.advertiser_id, advertisers.advertiser_name
-        """, ('%Apps%', batch_size))
+        """, ('HK', batch_size))
         
         rows = cursor.fetchall()
         conn.commit()  # Commit immediately to release locks
@@ -455,6 +455,7 @@ def reset_stuck_processing_advertisers():
     """
     Reset advertisers stuck in 'processing' status back to 'pending'.
     Should be called on startup to clean up from previous crashes.
+    Resets ALL stuck advertisers, not just those matching selection criteria.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -462,8 +463,7 @@ def reset_stuck_processing_advertisers():
             UPDATE advertisers
             SET status = 'pending'
             WHERE status = 'processing'
-              AND advertiser_name ILIKE %s
-        """, ('%Apps%',))
+        """)
         reset_count = cursor.rowcount
         conn.commit()
         cursor.close()
@@ -485,8 +485,8 @@ def get_statistics() -> Dict[str, int]:
                 COUNT(*) FILTER (WHERE status = 'completed') as completed,
                 COUNT(*) FILTER (WHERE status = 'failed') as failed
             FROM advertisers 
-            WHERE advertiser_name ILIKE %s
-        """, ('%Apps%',))
+            WHERE country = %s
+        """, ('HK',))
         
         row = cursor.fetchone()
         cursor.close()
@@ -1000,7 +1000,7 @@ async def run_scraper(max_concurrent: int = None, batch_size: int = None, max_ba
     
     # Get initial statistics
     db_stats = get_statistics()
-    print(f"\nAdvertisers Table Statistics (name contains 'Apps'):")
+    print(f"\nAdvertisers Table Statistics (country = 'HK'):")
     print(f"  Total:      {db_stats['total']}")
     print(f"  NULL:       {db_stats['null']}")
     print(f"  Pending:    {db_stats['pending']}")

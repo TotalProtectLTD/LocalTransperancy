@@ -1007,6 +1007,19 @@ async def run_stress_test(max_concurrent: int = None, max_urls: Optional[int] = 
     print("GOOGLE ADS TRANSPARENCY CENTER - STRESS TEST (OPTIMIZED)")
     print("="*80)
     
+    # Reset any stuck 'processing' rows from previous runs
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE creatives_fresh
+            SET status = 'pending'
+            WHERE status = 'processing'
+        """)
+        reset_count = cursor.rowcount
+        conn.commit()
+        if reset_count > 0:
+            print(f"\n✓ Reset {reset_count} stuck 'processing' rows to 'pending'")
+    
     # Get initial statistics
     db_stats = get_statistics()
     print(f"\nDatabase Statistics:")

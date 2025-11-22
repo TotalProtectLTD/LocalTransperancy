@@ -1,0 +1,22 @@
+{
+  "request_details": {
+    "method": "POST",
+    "url": "https://magictransparency.com/api/appmagic/apps/2728/metrics",
+    "headers": {
+      "X-Incoming-Secret": "ad2a58397cf97c8bdf5814a95e33b2c17490933d9255e3e10d55ed36a665449e",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "app_info": {
+      "app_id": 2728,
+      "appmagic_appid": "9583805",
+      "app_name": "Cleaning Master for Your Phone"
+    }
+  },
+  "error_received": {
+    "status_code": 400,
+    "error": "Bad Request",
+    "detail": "Failed to store metrics: 'NoneType' object has no attribute 'get'"
+  },
+  "note": "The actual payload is in payload_to_server_2728_9583805.json (same directory)"
+}
